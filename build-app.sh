@@ -2,11 +2,13 @@
 # Builds a release binary and wraps it in a menu-bar-only .app bundle (no Dock icon).
 set -e
 cd "$(dirname "$0")"
-swift build -c release
+# -Osize: this app is UI/syscall-bound, so smaller code beats aggressive inlining. dead_strip drops unused code.
+swift build -c release -Xswiftc -Osize -Xlinker -dead_strip
 APP=build/LLMMemCleaner.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp .build/release/LLMMemCleaner "$APP/Contents/MacOS/"
+strip -x "$APP/Contents/MacOS/LLMMemCleaner"  # drop local symbols (must happen before signing)
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

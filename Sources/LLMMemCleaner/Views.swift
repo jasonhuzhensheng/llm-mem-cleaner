@@ -48,6 +48,8 @@ struct ContentView: View {
         .frame(width: 440)
         // tr() isn't observable, so rebuild the whole panel when the language changes.
         .id(model.language)
+        .onAppear { model.panelOpen = true }
+        .onDisappear { model.panelOpen = false }
         .task(id: model.tab) {
             // Refresh while the panel is open; SwiftUI cancels this when it closes or the tab changes.
             while !Task.isCancelled {

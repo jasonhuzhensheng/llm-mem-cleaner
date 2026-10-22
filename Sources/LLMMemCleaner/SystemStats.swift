@@ -64,23 +64,24 @@ struct GPUStats {
     var wiredLimit: UInt64 = 0    // max memory the GPU may wire (unified memory)
     var wiredLimitIsDefault = true
 
+    /// Model name and core count never change, so read them once.
+    private static let identity: (model: String, cores: Int) = {
+        var result = (model: "GPU", cores: 0)
+        forEachService("IOAccelerator") { service in
+            if let m = property(service, "model") as? String { result.model = m }
+            if let c = property(service, "gpu-core-count") as? NSNumber { result.cores = c.intValue }
+        }
+        return result
+    }()
+
     static func current() -> GPUStats {
         var stats = GPUStats()
-        var iter: io_iterator_t = 0
-        if IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOAccelerator"), &iter) == KERN_SUCCESS {
-            defer { IOObjectRelease(iter) }
-            var service = IOIteratorNext(iter)
-            while service != 0 {
-                if let dict = properties(of: service) {
-                    if let m = dict["model"] as? String { stats.model = m }
-                    if let c = dict["gpu-core-count"] as? NSNumber { stats.cores = c.intValue }
-                    if let perf = dict["PerformanceStatistics"] as? [String: Any] {
-                        stats.utilization = (perf["Device Utilization %"] as? NSNumber)?.intValue ?? 0
-                        stats.inUseMemory = (perf["In use system memory"] as? NSNumber)?.uint64Value ?? 0
-                    }
-                }
-                IOObjectRelease(service)
-                service = IOIteratorNext(iter)
+        (stats.model, stats.cores) = identity
+        forEachService("IOAccelerator") { service in
+            // Read just this key instead of copying the accelerator's whole property table.
+            if let perf = property(service, "PerformanceStatistics") as? [String: Any] {
+                stats.utilization = (perf["Device Utilization %"] as? NSNumber)?.intValue ?? 0
+                stats.inUseMemory = (perf["In use system memory"] as? NSNumber)?.uint64Value ?? 0
             }
         }
 
@@ -99,10 +100,20 @@ struct GPUStats {
     }
 }
 
-func properties(of entry: io_registry_entry_t) -> [String: Any]? {
-    var props: Unmanaged<CFMutableDictionary>?
-    guard IORegistryEntryCreateCFProperties(entry, &props, kCFAllocatorDefault, 0) == KERN_SUCCESS else { return nil }
-    return props?.takeRetainedValue() as? [String: Any]
+func property(_ entry: io_registry_entry_t, _ key: String) -> Any? {
+    IORegistryEntryCreateCFProperty(entry, key as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue()
+}
+
+func forEachService(_ className: String, _ body: (io_registry_entry_t) -> Void) {
+    var iter: io_iterator_t = 0
+    guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching(className), &iter) == KERN_SUCCESS else { return }
+    defer { IOObjectRelease(iter) }
+    var service = IOIteratorNext(iter)
+    while service != 0 {
+        body(service)
+        IOObjectRelease(service)
+        service = IOIteratorNext(iter)
+    }
 }
 
 // MARK: - Disk
@@ -125,17 +136,10 @@ final class DiskIOSampler {
 
     func sample() -> (readPerSec: Double, writePerSec: Double) {
         var read: UInt64 = 0, write: UInt64 = 0
-        var iter: io_iterator_t = 0
-        if IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOBlockStorageDriver"), &iter) == KERN_SUCCESS {
-            defer { IOObjectRelease(iter) }
-            var service = IOIteratorNext(iter)
-            while service != 0 {
-                if let s = properties(of: service)?["Statistics"] as? [String: Any] {
-                    read += (s["Bytes (Read)"] as? NSNumber)?.uint64Value ?? 0
-                    write += (s["Bytes (Write)"] as? NSNumber)?.uint64Value ?? 0
-                }
-                IOObjectRelease(service)
-                service = IOIteratorNext(iter)
+        forEachService("IOBlockStorageDriver") { service in
+            if let s = property(service, "Statistics") as? [String: Any] {
+                read += (s["Bytes (Read)"] as? NSNumber)?.uint64Value ?? 0
+                write += (s["Bytes (Write)"] as? NSNumber)?.uint64Value ?? 0
             }
         }
         let now = Date()

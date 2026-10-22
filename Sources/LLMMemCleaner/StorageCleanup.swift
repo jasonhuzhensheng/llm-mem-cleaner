@@ -6,7 +6,7 @@ struct CleanupItem: Identifiable {
     let group: String
     let name: String
     let url: URL
-    let size: UInt64
+    var size: UInt64 = 0
     /// Only shown, never offered for deletion (e.g. the Trash itself).
     var revealOnly = false
     /// Regenerable cache, included in one-click cleaning.
@@ -27,7 +27,7 @@ enum StorageCleanup {
             let hf = home.appending(path: ".cache/huggingface/hub")
             for dir in subdirectories(of: hf) where dir.lastPathComponent.contains("--") {
                 let name = dir.lastPathComponent.split(separator: "--").dropFirst().joined(separator: "/")
-                items.append(CleanupItem(group: "Hugging Face", name: name, url: dir, size: allocatedSize(dir)))
+                items.append(CleanupItem(group: "Hugging Face", name: name, url: dir))
             }
 
             // LM Studio keeps models as <publisher>/<model>.
@@ -36,7 +36,7 @@ enum StorageCleanup {
                     for model in subdirectories(of: publisher) {
                         items.append(CleanupItem(group: "LM Studio",
                                                  name: "\(publisher.lastPathComponent)/\(model.lastPathComponent)",
-                                                 url: model, size: allocatedSize(model)))
+                                                 url: model))
                     }
                 }
             }
@@ -45,19 +45,27 @@ enum StorageCleanup {
                 let dir = home.appending(path: path)
                 guard FileManager.default.fileExists(atPath: dir.path) else { continue }
                 items.append(CleanupItem(group: tr("开发缓存", "Developer caches"), name: name, url: dir,
-                                         size: allocatedSize(dir), isCache: true))
+                                         isCache: true))
             }
 
             for dir in subdirectories(of: home.appending(path: "Library/Caches")) {
                 let name = dir.lastPathComponent
                 items.append(CleanupItem(group: tr("应用缓存", "App caches"), name: name, url: dir,
-                                         size: allocatedSize(dir), isCache: !name.hasPrefix("com.apple.")))
+                                         isCache: !name.hasPrefix("com.apple.")))
             }
 
             let trash = home.appending(path: ".Trash")
             items.append(CleanupItem(group: tr("废纸篓", "Trash"), name: tr("废纸篓（需在 Finder 中清倒）", "Trash (empty it in Finder)"), url: trash,
-                                     size: allocatedSize(trash), revealOnly: true))
+                                     revealOnly: true))
 
+            // Sizing is the slow part (walking every file), and folders are independent: do them in parallel.
+            items.withUnsafeMutableBufferPointer { buffer in
+                // Each iteration writes only its own index, so concurrent access is safe.
+                nonisolated(unsafe) let buf = buffer
+                DispatchQueue.concurrentPerform(iterations: buf.count) { i in
+                    buf[i].size = allocatedSize(buf[i].url)
+                }
+            }
             return items.filter { $0.size >= minSize }.sorted { $0.size > $1.size }
         }.value
     }

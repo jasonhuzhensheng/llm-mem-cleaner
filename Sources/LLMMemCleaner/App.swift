@@ -45,11 +45,11 @@ final class MonitorModel {
         }
     }
 
-    // System-wide, sampled continuously so the menu bar title stays live.
+    // Memory is sampled continuously for the menu bar icon; the rest only while the panel is open.
     var stats = MemoryStats.current()
     var cpu = CPUSampler.Snapshot()
-    var gpu = GPUStats.current()
-    var volume = VolumeInfo.root()
+    var gpu = GPUStats()
+    var volume = VolumeInfo()
     var diskIO: (readPerSec: Double, writePerSec: Double) = (0, 0)
     var interfaces: [InterfaceRate] = []
 
@@ -80,25 +80,50 @@ final class MonitorModel {
     private let procNetSampler = ProcessNetworkSampler()
     private var timer: Timer?
 
-    init() {
-        sampleSystem()
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.sampleSystem() }
-        }
+    /// Menu bar icon: a memory chip with available GB printed on it. Stored (not computed) and
+    /// only replaced when the visible number or color changes, so the menu bar doesn't redraw every tick.
+    private(set) var menuImage = NSImage()
+    private var menuImageKey = ""
+
+    /// Set by the panel; while false only memory is sampled.
+    var panelOpen = false {
+        didSet { if panelOpen && !oldValue { sampleDetails() } }
     }
 
-    /// Menu bar icon: a memory chip colored by usage, with available GB printed on it.
-    var menuImage: NSImage {
-        let usedFrac = stats.total > 0 ? Double(stats.used) / Double(stats.total) : 0
-        return memoryChipImage(text: "\(stats.available / GB)", usedFraction: usedFrac)
+    init() {
+        updateMenuImage()
+        let t = Timer(timeInterval: 2, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.tick() }
+        }
+        t.tolerance = 0.5  // lets macOS coalesce wake-ups
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
     }
 
     var selectedBytes: UInt64 {
         apps.filter { selected.contains($0.id) }.reduce(0) { $0 + $1.footprint }
     }
 
-    private func sampleSystem() {
-        stats = MemoryStats.current()
+    private func tick() {
+        let s = MemoryStats.current()
+        // Skip the assignment when nothing moved, so observers aren't notified.
+        if s.used != stats.used || s.swapUsed != stats.swapUsed || s.pressureFreePercent != stats.pressureFreePercent {
+            stats = s
+            updateMenuImage()
+        }
+        if panelOpen { sampleDetails() }
+    }
+
+    private func updateMenuImage() {
+        let usedFrac = stats.total > 0 ? Double(stats.used) / Double(stats.total) : 0
+        let text = "\(stats.available / GB)"
+        let key = "\(text)|\(usedFrac > 0.95)"
+        guard key != menuImageKey else { return }
+        menuImageKey = key
+        menuImage = memoryChipImage(text: text, usedFraction: usedFrac)
+    }
+
+    private func sampleDetails() {
         cpu = cpuSampler.sample()
         gpu = GPUStats.current()
         volume = VolumeInfo.root()

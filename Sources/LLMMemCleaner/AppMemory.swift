@@ -24,6 +24,11 @@ final class AppSampler {
     private var previous: [pid_t: Counters] = [:]
     private var previousAt: Date?
 
+    /// A process's executable can't change while its PID lives, so look each one up once.
+    /// nil = not inside any .app bundle (most daemons), so it's skipped without a syscall next time.
+    private var pathCache: [pid_t: String?] = [:]
+    private var pathBuffer = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4)
+
     /// rusage CPU times are in mach absolute time units, not nanoseconds, on Apple Silicon.
     private let machToNs: Double = {
         var tb = mach_timebase_info_data_t()
@@ -41,10 +46,26 @@ final class AppSampler {
         return ok == 0 ? info : nil
     }
 
-    static func executablePath(_ pid: pid_t) -> String? {
-        var buf = [CChar](repeating: 0, count: Int(MAXPATHLEN) * 4)
-        let n = proc_pidpath(pid, &buf, UInt32(buf.count))
-        return n > 0 ? String(cString: buf) : nil
+    /// Cached executable path for processes that live inside an app bundle.
+    private func bundledPath(_ pid: pid_t) -> String? {
+        if let cached = pathCache[pid] { return cached }
+        let n = proc_pidpath(pid, &pathBuffer, UInt32(pathBuffer.count))
+        let path = n > 0 ? String(cString: pathBuffer) : nil
+        let result = path.flatMap { $0.contains(".app/") ? $0 : nil }
+        pathCache[pid] = .some(result)
+        return result
+    }
+
+    /// Every "<…>.app" prefix of `path`, innermost first, so nested helper bundles
+    /// resolve to the most specific running app.
+    private static func bundlePrefixes(of path: String) -> [Substring] {
+        var prefixes: [Substring] = []
+        var search = path.startIndex
+        while let r = path.range(of: ".app/", range: search..<path.endIndex) {
+            prefixes.append(path[..<r.upperBound])
+            search = r.upperBound
+        }
+        return prefixes.reversed()
     }
 
     static func allPIDs() -> [pid_t] {
@@ -63,36 +84,38 @@ final class AppSampler {
                 && !Self.protectedBundleIDs.contains($0.bundleIdentifier ?? "")
         }
 
-        // Longest bundle path first so nested bundles match the most specific app.
-        var byBundle: [(prefix: String, index: Int)] = []
+        var bundleIndex: [Substring: Int] = [:]
         var usages: [AppUsage] = []
         for app in apps {
             guard let url = app.bundleURL else { continue }
-            byBundle.append((url.path + "/", usages.count))
+            bundleIndex[Substring(url.path + "/")] = usages.count
             usages.append(AppUsage(app: app))
         }
-        byBundle.sort { $0.prefix.count > $1.prefix.count }
 
         let now = Date()
         let dt = previousAt.map { max(now.timeIntervalSince($0), 0.001) }
         var current: [pid_t: Counters] = [:]
+        let pids = Self.allPIDs()
 
-        for pid in Self.allPIDs() where pid > 0 {
-            guard let path = Self.executablePath(pid),
-                  let match = byBundle.first(where: { path.hasPrefix($0.prefix) }),
+        for pid in pids where pid > 0 {
+            guard let path = bundledPath(pid),
+                  let index = Self.bundlePrefixes(of: path).lazy.compactMap({ bundleIndex[$0] }).first,
                   let ru = Self.rusage(pid) else { continue }
             let c = Counters(cpuNs: UInt64(Double(ru.ri_user_time + ru.ri_system_time) * machToNs),
                              diskBytes: ru.ri_diskio_bytesread + ru.ri_diskio_byteswritten)
             current[pid] = c
 
-            usages[match.index].footprint += ru.ri_phys_footprint
-            usages[match.index].processCount += 1
+            usages[index].footprint += ru.ri_phys_footprint
+            usages[index].processCount += 1
             if let dt, let p = previous[pid] {
-                usages[match.index].cpu += Double(c.cpuNs &- min(p.cpuNs, c.cpuNs)) / 1e9 / dt
-                usages[match.index].diskPerSec += Double(c.diskBytes &- min(p.diskBytes, c.diskBytes)) / dt
+                usages[index].cpu += Double(c.cpuNs &- min(p.cpuNs, c.cpuNs)) / 1e9 / dt
+                usages[index].diskPerSec += Double(c.diskBytes &- min(p.diskBytes, c.diskBytes)) / dt
             }
         }
 
+        // Forget exited PIDs so the cache can't grow without bound or match a reused PID.
+        let live = Set(pids)
+        pathCache = pathCache.filter { live.contains($0.key) }
         previous = current
         previousAt = now
         return usages.filter { $0.processCount > 0 }
