@@ -28,6 +28,10 @@ Requires macOS 14+ and Xcode command line tools.
 ./build-app.sh --install  # also installs to ~/Applications and launches it
 ```
 
+## Author / 作者
+
+X: [@HUZHENSHENG](https://x.com/HUZHENSHENG) — follow for updates and feedback. / 关注获取更新、反馈问题。
+
 ## Notes / 说明
 
 - Quitting apps tries a normal quit first and force-quits after 5 seconds; unsaved work may be lost.

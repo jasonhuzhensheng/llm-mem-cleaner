@@ -35,6 +35,7 @@ enum Tab: String, CaseIterable, Identifiable {
 @MainActor @Observable
 final class MonitorModel {
     var tab: Tab = .memory
+    var showAbout = false
     var language = L10n.current {
         didSet {
             L10n.current = language

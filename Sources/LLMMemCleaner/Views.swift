@@ -6,7 +6,9 @@ struct ContentView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Picker("", selection: $model.tab) {
+            Picker("", selection: Binding(
+                get: { model.tab },
+                set: { model.tab = $0; model.showAbout = false })) {
                 ForEach(Tab.allCases) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
@@ -14,13 +16,17 @@ struct ContentView: View {
 
             ScrollView {
                 Group {
-                    switch model.tab {
-                    case .memory: MemoryTab(model: model)
-                    case .cpu: CPUTab(model: model)
-                    case .gpu: GPUTab(model: model)
-                    case .disk: DiskTab(model: model)
-                    case .network: NetworkTab(model: model)
-                    case .startup: StartupTab(model: model)
+                    if model.showAbout {
+                        AboutView(model: model)
+                    } else {
+                        switch model.tab {
+                        case .memory: MemoryTab(model: model)
+                        case .cpu: CPUTab(model: model)
+                        case .gpu: GPUTab(model: model)
+                        case .disk: DiskTab(model: model)
+                        case .network: NetworkTab(model: model)
+                        case .startup: StartupTab(model: model)
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -74,9 +80,61 @@ struct ContentView: View {
             Button(tr("活动监视器", "Activity Monitor")) {
                 NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Activity Monitor.app"))
             }
+            Button {
+                model.showAbout.toggle()
+            } label: {
+                Image(systemName: model.showAbout ? "info.circle.fill" : "info.circle")
+            }
+            .buttonStyle(.borderless)
+            .help(tr("关于", "About"))
             Button(tr("退出", "Quit")) { NSApp.terminate(nil) }
         }
         .controlSize(.small)
+    }
+}
+
+// MARK: - About
+
+struct AboutView: View {
+    @Bindable var model: MonitorModel
+
+    static let xURL = URL(string: "https://x.com/HUZHENSHENG")!
+    static let repoURL = URL(string: "https://github.com/jasonhuzhensheng/llm-mem-cleaner")!
+
+    var body: some View {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                Image(nsImage: memoryChipImage(text: "AI", usedFraction: 0))
+                    .resizable().interpolation(.high)
+                    .frame(width: 44, height: 36)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("LLM Mem Cleaner").font(.title2.bold())
+                    Text(tr("版本 \(version)", "Version \(version)")).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Text(tr("在本地运行大模型前，查看并一键释放内存、GPU 显存、磁盘和网络资源。",
+                    "See and free up memory, GPU memory, disk and network before running local LLMs."))
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
+            SectionTitle(text: tr("作者", "Author"))
+            Link(destination: Self.xURL) {
+                Label("@HUZHENSHENG", systemImage: "at")
+            }
+            .help(Self.xURL.absoluteString)
+            Text(tr("在 X 上关注，获取更新和反馈问题。", "Follow on X for updates and feedback."))
+                .font(.caption).foregroundStyle(.secondary)
+
+            Divider()
+            SectionTitle(text: tr("源代码", "Source code"))
+            Link(destination: Self.repoURL) {
+                Label("github.com/jasonhuzhensheng/llm-mem-cleaner", systemImage: "chevron.left.forwardslash.chevron.right")
+            }
+
+            Button(tr("返回", "Back")) { model.showAbout = false }
+                .controlSize(.small)
+        }
     }
 }
 
