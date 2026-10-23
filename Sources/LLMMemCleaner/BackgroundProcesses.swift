@@ -18,6 +18,7 @@ struct BackgroundProcess: Identifiable {
     /// true when measured as RSS via `ps` (other users' processes); false for exact phys_footprint.
     var approximate: Bool
     var kind: Kind
+    var origin: ProcessOrigin
 
     var id: String { name }
 }
@@ -76,7 +77,9 @@ enum BackgroundProcesses {
                 groups[name] = g
             } else {
                 groups[name] = BackgroundProcess(name: name, pids: [pid], bytes: bytes, approximate: approximate,
-                                                 kind: kind(name: name, path: path, own: own))
+                                                 kind: kind(name: name, path: path, own: own),
+                                                 // ps sometimes prints a bare name; resolve the real path for those.
+                                                 origin: ProcessOrigin.of(path: path.hasPrefix("/") ? path : executablePath(Int(pid)), pid: Int(pid)))
             }
         }
         return groups.values.filter { $0.bytes >= minBytes }.sorted { $0.bytes > $1.bytes }

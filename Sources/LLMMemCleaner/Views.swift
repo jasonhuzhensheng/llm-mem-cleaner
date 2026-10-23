@@ -142,6 +142,56 @@ struct AboutView: View {
 
 // MARK: - Shared pieces
 
+/// Splits process rows into user and system groups; the system group starts collapsed.
+struct OriginGrouped<Item: Identifiable, Row: View>: View {
+    let items: [Item]
+    let origin: (Item) -> ProcessOrigin
+    var limit = 15
+    /// Optional per-group total shown in the header, e.g. summed memory.
+    var summary: (([Item]) -> String)?
+    @ViewBuilder let row: (Item) -> Row
+
+    @State private var showSystem = false
+
+    var body: some View {
+        let user = items.filter { origin($0) == .user }
+        let system = items.filter { origin($0) == .system }
+        VStack(alignment: .leading, spacing: 2) {
+            if !user.isEmpty {
+                header(tr("用户进程", "User"), user, chevron: nil)
+                ForEach(user.prefix(limit)) { row($0) }
+            }
+            if !system.isEmpty {
+                Button {
+                    withAnimation(.easeOut(duration: 0.15)) { showSystem.toggle() }
+                } label: {
+                    header(tr("系统进程", "System"), system, chevron: showSystem)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, user.isEmpty ? 0 : 4)
+                if showSystem {
+                    ForEach(system.prefix(limit)) { row($0) }
+                }
+            }
+        }
+    }
+
+    private func header(_ title: String, _ group: [Item], chevron expanded: Bool?) -> some View {
+        HStack(spacing: 4) {
+            if let expanded {
+                Image(systemName: "chevron.right")
+                    .font(.caption2.bold())
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
+            }
+            Text("\(title) · \(group.count)").font(.caption.bold())
+            Spacer()
+            if let summary { Text(summary(group)).font(.caption.monospacedDigit()) }
+        }
+        .foregroundStyle(.secondary)
+    }
+}
+
 struct SectionTitle: View {
     let text: String
     var body: some View { Text(text).font(.subheadline.bold()) }
@@ -372,7 +422,8 @@ struct BackgroundSection: View {
                 if model.background.isEmpty {
                     ProgressView().controlSize(.small)
                 }
-                ForEach(model.background.prefix(15)) { p in row(p) }
+                OriginGrouped(items: model.background, origin: \.origin,
+                              summary: { formatBytes($0.reduce(0) { $0 + $1.bytes }) }) { p in row(p) }
             }
         }
     }
@@ -506,7 +557,7 @@ struct GPUTab: View {
                 Text(tr("采样中…或当前没有进程在使用 GPU", "Sampling… or nothing is using the GPU"))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            ForEach(model.gpuClients.prefix(10)) { c in
+            OriginGrouped(items: model.gpuClients, origin: \.origin, limit: 10) { c in
                 HStack(spacing: 6) {
                     Text(c.name).lineLimit(1).truncationMode(.middle)
                     Text("\(c.pid)").font(.caption2).foregroundStyle(.secondary)
@@ -554,7 +605,7 @@ struct GPUTab: View {
                 Text(tr("当前没有进程在使用 ANE", "No process is using the ANE"))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            ForEach(ane.clients) { c in
+            OriginGrouped(items: ane.clients, origin: \.origin) { c in
                 HStack {
                     Text(c.name).lineLimit(1).truncationMode(.middle)
                     Text("\(c.pid)").font(.caption2).foregroundStyle(.secondary)
@@ -950,7 +1001,7 @@ struct NetworkTab: View {
                 Text(tr("采样中…（需要两次采样才能算出速率）", "Sampling… (rates need two samples)"))
                     .font(.caption).foregroundStyle(.secondary)
             }
-            ForEach(model.processNetwork.prefix(15)) { p in
+            OriginGrouped(items: model.processNetwork, origin: \.origin) { p in
                 HStack {
                     Text(p.name).lineLimit(1)
                     Text("\(p.pid)").font(.caption2).foregroundStyle(.secondary)

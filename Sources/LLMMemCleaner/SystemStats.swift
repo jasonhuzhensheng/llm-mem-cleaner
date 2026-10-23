@@ -200,6 +200,7 @@ final class ProcessNetworkSampler {
         let pid: Int
         var inPerSec: Double
         var outPerSec: Double
+        var origin: ProcessOrigin
         var id: Int { pid }
     }
 
@@ -228,10 +229,12 @@ final class ProcessNetworkSampler {
         let dt = max(now.timeIntervalSince(at), 0.001)
         return current.compactMap { pid, cur in
             guard let p = previous[pid] else { return nil }
-            let r = Row(name: cur.name, pid: pid,
-                        inPerSec: Double(cur.inB &- min(p.inB, cur.inB)) / dt,
-                        outPerSec: Double(cur.outB &- min(p.outB, cur.outB)) / dt)
-            return r.inPerSec + r.outPerSec > 0 ? r : nil
+            let inRate = Double(cur.inB &- min(p.inB, cur.inB)) / dt
+            let outRate = Double(cur.outB &- min(p.outB, cur.outB)) / dt
+            guard inRate + outRate > 0 else { return nil }
+            let path = executablePath(pid)
+            return Row(name: path.map { ($0 as NSString).lastPathComponent } ?? cur.name, pid: pid,
+                       inPerSec: inRate, outPerSec: outRate, origin: ProcessOrigin.of(path: path, pid: pid))
         }
         .sorted { $0.inPerSec + $0.outPerSec > $1.inPerSec + $1.outPerSec }
     }

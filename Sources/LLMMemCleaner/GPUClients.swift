@@ -9,6 +9,7 @@ struct GPUClient: Identifiable {
     var gpu: Double              // 0...1 of GPU time (what Activity Monitor shows as GPU %)
     var footprint: UInt64?       // nil for other users' processes (can't read)
     var canStop: Bool
+    var origin: ProcessOrigin
     var id: Int { pid }
 }
 
@@ -50,9 +51,12 @@ final class GPUClientSampler {
             guard let prev = previous[pid], t.ns > prev else { return nil }
             let share = Double(t.ns - prev) / 1e9 / dt
             guard share >= 0.001 else { return nil }
-            return GPUClient(pid: pid, name: executableName(pid) ?? t.name, gpu: min(share, 1),
+            let path = executablePath(pid)
+            return GPUClient(pid: pid, name: path.map { ($0 as NSString).lastPathComponent } ?? t.name,
+                             gpu: min(share, 1),
                              footprint: AppSampler.rusage(pid_t(pid))?.ri_phys_footprint,
-                             canStop: kill(pid_t(pid), 0) == 0)
+                             canStop: kill(pid_t(pid), 0) == 0,
+                             origin: ProcessOrigin.of(path: path, pid: pid))
         }
         .sorted { $0.gpu > $1.gpu }
     }
@@ -63,11 +67,4 @@ func parseUserClientCreator(_ s: String) -> (pid: Int, name: String)? {
     guard s.hasPrefix("pid "), let comma = s.firstIndex(of: ","),
           let pid = Int(s[s.index(s.startIndex, offsetBy: 4)..<comma]) else { return nil }
     return (pid, s[s.index(after: comma)...].trimmingCharacters(in: .whitespaces))
-}
-
-/// Full executable name; IOKit and `ps` truncate names to 16 characters.
-func executableName(_ pid: Int) -> String? {
-    var buf = [CChar](repeating: 0, count: Int(MAXPATHLEN))
-    guard proc_pidpath(Int32(pid), &buf, UInt32(buf.count)) > 0 else { return nil }
-    return (String(cString: buf) as NSString).lastPathComponent
 }

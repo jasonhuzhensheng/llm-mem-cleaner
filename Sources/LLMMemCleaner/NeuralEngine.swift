@@ -11,6 +11,7 @@ struct NeuralEngineStatus {
         let pid: Int
         let name: String
         var connections: Int
+        var origin: ProcessOrigin = .user
         var id: Int { pid }
     }
 
@@ -60,7 +61,11 @@ enum NeuralEngine {
             }
         }
         status.clients = byPID.values
-            .map { NeuralEngineStatus.Client(pid: $0.pid, name: executableName($0.pid) ?? $0.name, connections: $0.connections) }
+            .map { c -> NeuralEngineStatus.Client in
+                let path = executablePath(c.pid)
+                return NeuralEngineStatus.Client(pid: c.pid, name: path.map { ($0 as NSString).lastPathComponent } ?? c.name,
+                                                 connections: c.connections, origin: ProcessOrigin.of(path: path, pid: c.pid))
+            }
             .sorted { $0.connections > $1.connections }
         return status
     }
