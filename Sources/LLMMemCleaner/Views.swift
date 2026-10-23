@@ -301,6 +301,8 @@ struct MemoryTab: View {
             Divider()
             AppListView(model: model, title: tr("应用内存占用", "Memory by app"),
                         sortKey: { Double($0.footprint) }, value: { formatBytes($0.footprint) })
+            Divider()
+            BackgroundSection(model: model)
             OllamaLoadedSection(model: model)
         }
     }
@@ -338,6 +340,75 @@ struct MemoryTab: View {
                 Text(tr("蓝色：退出选中应用后可运行", "Blue: fits after quitting the selected apps"))
                     .font(.caption2).foregroundStyle(.blue)
             }
+        }
+    }
+}
+
+/// Daemons, agents and helpers that aren't Dock apps, with what (if anything) can be done about each.
+struct BackgroundSection: View {
+    @Bindable var model: MonitorModel
+    @State private var pending: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            SectionTitle(text: tr("后台进程", "Background processes"))
+            Text(tr("不在 Dock 中的服务和辅助进程（≥ 50 MB）。≈ 表示估算值。",
+                    "Services and helpers not in the Dock (≥ 50 MB). ≈ means estimated."))
+                .font(.caption2).foregroundStyle(.secondary)
+            if model.background.isEmpty {
+                ProgressView().controlSize(.small)
+            }
+            ForEach(model.background.prefix(15)) { p in row(p) }
+        }
+    }
+
+    private func row(_ p: BackgroundProcess) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 6) {
+                Text(p.name).lineLimit(1).truncationMode(.middle)
+                if p.pids.count > 1 {
+                    Text("×\(p.pids.count)").font(.caption2).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text((p.approximate ? "≈ " : "") + formatBytes(p.bytes)).font(.callout.monospacedDigit())
+                action(p)
+            }
+            if let hint = hint(p.kind) {
+                Text(hint).font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 1)
+        .controlSize(.small)
+    }
+
+    @ViewBuilder private func action(_ p: BackgroundProcess) -> some View {
+        switch p.kind {
+        case .own, .respawns:
+            if pending == p.id {
+                Button(tr("确认", "Confirm")) {
+                    pending = nil
+                    Task { await model.stopBackground(p) }
+                }
+                .tint(.red)
+                Button(tr("取消", "Cancel")) { pending = nil }
+            } else {
+                Button(tr("结束", "Stop")) { pending = p.id }.disabled(model.busy)
+            }
+        case .spotlight:
+            Button(tr("设置", "Settings")) { BackgroundProcesses.openSpotlightPrivacy() }
+        case .antivirus, .system:
+            EmptyView()
+        }
+    }
+
+    private func hint(_ kind: BackgroundProcess.Kind) -> String? {
+        switch kind {
+        case .own: nil
+        case .respawns: tr("系统服务，结束后过一会儿会自动重启", "System service; restarts on its own after a while")
+        case .spotlight: tr("Spotlight 索引：在「搜索隐私」里排除模型磁盘可减少占用",
+                            "Spotlight indexing: exclude your model disk under Search Privacy")
+        case .antivirus: tr("杀毒软件受保护，只能在它自己的界面里暂停", "Protected antivirus; pause it from its own app")
+        case .system: tr("系统进程，无法结束", "System process; can't be stopped")
         }
     }
 }

@@ -55,6 +55,7 @@ final class MonitorModel {
 
     // Sampled only while the panel is open.
     var apps: [AppUsage] = []
+    var background: [BackgroundProcess] = []
     var processNetwork: [ProcessNetworkSampler.Row] = []
     var ollamaModels: [Ollama.LoadedModel]?
     var ollamaInstalled: [Ollama.LoadedModel]?
@@ -137,6 +138,8 @@ final class MonitorModel {
         selected = selected.filter { pid in apps.contains { $0.id == pid } }
         ollamaModels = await Ollama.loadedModels()
         switch tab {
+        case .memory:
+            background = await BackgroundProcesses.sample(excluding: appSampler.appPIDs)
         case .network:
             processNetwork = await procNetSampler.sample()
             wifi = NetworkTools.wifiInfo()
@@ -152,6 +155,20 @@ final class MonitorModel {
         selected.removeAll()
         try? await Task.sleep(for: .seconds(1))  // let the kernel reclaim pages
         await refreshPanel()
+        busy = false
+    }
+
+    func stopBackground(_ group: BackgroundProcess) async {
+        busy = true
+        let stopped = BackgroundProcesses.stop(group)
+        if stopped < group.pids.count {
+            message = tr("\(group.name)：结束了 \(stopped)/\(group.pids.count) 个进程",
+                         "\(group.name): stopped \(stopped) of \(group.pids.count) processes")
+        }
+        try? await Task.sleep(for: .seconds(1))
+        stats = MemoryStats.current()
+        updateMenuImage()
+        background = await BackgroundProcesses.sample(excluding: appSampler.appPIDs)
         busy = false
     }
 

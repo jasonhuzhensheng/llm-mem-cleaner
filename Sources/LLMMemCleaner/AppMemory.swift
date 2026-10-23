@@ -22,6 +22,8 @@ final class AppSampler {
 
     private struct Counters { var cpuNs: UInt64; var diskBytes: UInt64 }
     private var previous: [pid_t: Counters] = [:]
+    /// PIDs charged to a Dock app in the last sample (so the background list can skip them).
+    var appPIDs: Set<pid_t> { Set(previous.keys) }
     private var previousAt: Date?
 
     /// A process's executable can't change while its PID lives, so look each one up once.
