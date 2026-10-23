@@ -56,6 +56,10 @@ final class MonitorModel {
     // Sampled only while the panel is open.
     var apps: [AppUsage] = []
     var background: [BackgroundProcess] = []
+    /// Collapsed by default; the list is only sampled while expanded.
+    var backgroundExpanded = false {
+        didSet { if backgroundExpanded && !oldValue { Task { await refreshBackground() } } }
+    }
     var processNetwork: [ProcessNetworkSampler.Row] = []
     var ollamaModels: [Ollama.LoadedModel]?
     var ollamaInstalled: [Ollama.LoadedModel]?
@@ -138,8 +142,8 @@ final class MonitorModel {
         selected = selected.filter { pid in apps.contains { $0.id == pid } }
         ollamaModels = await Ollama.loadedModels()
         switch tab {
-        case .memory:
-            background = await BackgroundProcesses.sample(excluding: appSampler.appPIDs)
+        case .memory where backgroundExpanded:
+            await refreshBackground()
         case .network:
             processNetwork = await procNetSampler.sample()
             wifi = NetworkTools.wifiInfo()
@@ -168,8 +172,12 @@ final class MonitorModel {
         try? await Task.sleep(for: .seconds(1))
         stats = MemoryStats.current()
         updateMenuImage()
-        background = await BackgroundProcesses.sample(excluding: appSampler.appPIDs)
+        await refreshBackground()
         busy = false
+    }
+
+    func refreshBackground() async {
+        background = await BackgroundProcesses.sample(excluding: appSampler.appPIDs)
     }
 
     func unload(_ name: String) async {

@@ -351,14 +351,29 @@ struct BackgroundSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            SectionTitle(text: tr("后台进程", "Background processes"))
-            Text(tr("不在 Dock 中的服务和辅助进程（≥ 50 MB）。≈ 表示估算值。",
-                    "Services and helpers not in the Dock (≥ 50 MB). ≈ means estimated."))
-                .font(.caption2).foregroundStyle(.secondary)
-            if model.background.isEmpty {
-                ProgressView().controlSize(.small)
+            Button {
+                withAnimation(.easeOut(duration: 0.15)) { model.backgroundExpanded.toggle() }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.bold())
+                        .rotationEffect(.degrees(model.backgroundExpanded ? 90 : 0))
+                    SectionTitle(text: tr("后台进程", "Background processes"))
+                    Spacer()
+                }
+                .contentShape(Rectangle())
             }
-            ForEach(model.background.prefix(15)) { p in row(p) }
+            .buttonStyle(.plain)
+
+            if model.backgroundExpanded {
+                Text(tr("不在 Dock 中的服务和辅助进程（≥ 50 MB）。≈ 表示估算值。",
+                        "Services and helpers not in the Dock (≥ 50 MB). ≈ means estimated."))
+                    .font(.caption2).foregroundStyle(.secondary)
+                if model.background.isEmpty {
+                    ProgressView().controlSize(.small)
+                }
+                ForEach(model.background.prefix(15)) { p in row(p) }
+            }
         }
     }
 
