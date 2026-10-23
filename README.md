@@ -8,11 +8,32 @@ The menu bar shows a memory-chip icon with available GB; the number turns red ab
 
 ## Screenshots / 截图
 
-| Memory 内存 | CPU | GPU |
-|---|---|---|
-| ![Memory](docs/screenshots/memory.png) | ![CPU](docs/screenshots/cpu.png) | ![GPU](docs/screenshots/gpu.png) |
-| **Disk 磁盘** | **Network 网络** | **About 关于** |
-| ![Disk](docs/screenshots/disk.png) | ![Network](docs/screenshots/network.png) | ![About](docs/screenshots/about.png) |
+<table>
+  <tr>
+    <th>Memory 内存</th>
+    <th>GPU · Neural Engine</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/memory.png" width="400" alt="Memory tab"></td>
+    <td><img src="docs/screenshots/gpu.png" width="400" alt="GPU tab"></td>
+  </tr>
+  <tr>
+    <th>CPU</th>
+    <th>Disk 磁盘</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/cpu.png" width="400" alt="CPU tab"></td>
+    <td><img src="docs/screenshots/disk.png" width="400" alt="Disk tab"></td>
+  </tr>
+  <tr>
+    <th>Network 网络</th>
+    <th>About 关于</th>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/network.png" width="400" alt="Network tab"></td>
+    <td><img src="docs/screenshots/about.png" width="400" alt="About page"></td>
+  </tr>
+</table>
 
 Regenerate with `build/LLMMemCleaner.app/Contents/MacOS/LLMMemCleaner --screenshots <dir> [light|dark] [zh|en]`.
 

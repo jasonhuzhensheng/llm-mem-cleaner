@@ -3,6 +3,8 @@ import SwiftUI
 
 struct ContentView: View {
     @Bindable var model: MonitorModel
+    /// Screenshot mode drops the fixed-height scroll area so the whole tab is captured, with no blank space.
+    var fullHeight = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -14,24 +16,12 @@ struct ContentView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
 
-            ScrollView {
-                Group {
-                    if model.showAbout {
-                        AboutView(model: model)
-                    } else {
-                        switch model.tab {
-                        case .memory: MemoryTab(model: model)
-                        case .cpu: CPUTab(model: model)
-                        case .gpu: GPUTab(model: model)
-                        case .disk: DiskTab(model: model)
-                        case .network: NetworkTab(model: model)
-                        case .startup: StartupTab(model: model)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if fullHeight {
+                tabContent
+            } else {
+                ScrollView { tabContent }
+                    .frame(height: 520)
             }
-            .frame(height: 520)
 
             if let msg = model.message {
                 HStack {
@@ -57,6 +47,24 @@ struct ContentView: View {
                 try? await Task.sleep(for: .seconds(3))
             }
         }
+    }
+
+    private var tabContent: some View {
+        Group {
+            if model.showAbout {
+                AboutView(model: model)
+            } else {
+                switch model.tab {
+                case .memory: MemoryTab(model: model)
+                case .cpu: CPUTab(model: model)
+                case .gpu: GPUTab(model: model)
+                case .disk: DiskTab(model: model)
+                case .network: NetworkTab(model: model)
+                case .startup: StartupTab(model: model)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var footer: some View {

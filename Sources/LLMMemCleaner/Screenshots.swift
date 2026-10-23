@@ -23,7 +23,7 @@ enum Screenshots {
     private static func capture(to dir: URL, dark: Bool) async {
         let model = MonitorModel()
         model.language = L10n.current
-        let hosting = NSHostingView(rootView: ContentView(model: model))
+        let hosting = NSHostingView(rootView: ContentView(model: model, fullHeight: true))
         let window = NSWindow(contentRect: NSRect(x: -10_000, y: -10_000, width: 440, height: 640),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
@@ -49,10 +49,12 @@ enum Screenshots {
     }
 
     private static func save(_ view: NSView, to url: URL) {
+        // Size the window to the tab's natural height so nothing is cut off or padded.
         view.layoutSubtreeIfNeeded()
-        let size = view.fittingSize
-        view.setFrameSize(NSSize(width: 440, height: max(size.height, 200)))
-        view.window?.setContentSize(view.frame.size)
+        let height = max(view.fittingSize.height, 200)
+        view.window?.setContentSize(NSSize(width: 440, height: height))
+        view.setFrameSize(NSSize(width: 440, height: height))
+        view.layoutSubtreeIfNeeded()
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
         view.cacheDisplay(in: view.bounds, to: rep)
         try? rep.representation(using: .png, properties: [:])?.write(to: url)
