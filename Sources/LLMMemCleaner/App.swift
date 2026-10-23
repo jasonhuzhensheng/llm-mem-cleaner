@@ -49,6 +49,7 @@ final class MonitorModel {
     var stats = MemoryStats.current()
     var cpu = CPUSampler.Snapshot()
     var gpu = GPUStats()
+    var neuralEngine = NeuralEngineStatus()
     var volume = VolumeInfo()
     var diskIO: (readPerSec: Double, writePerSec: Double) = (0, 0)
     var interfaces: [InterfaceRate] = []
@@ -144,6 +145,8 @@ final class MonitorModel {
         switch tab {
         case .memory where backgroundExpanded:
             await refreshBackground()
+        case .gpu:
+            neuralEngine = NeuralEngine.current()
         case .network:
             processNetwork = await procNetSampler.sample()
             wifi = NetworkTools.wifiInfo()

@@ -497,6 +497,40 @@ struct GPUTab: View {
         }
     }
 
+    private var neuralEngineSection: some View {
+        let ane = model.neuralEngine
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                SectionTitle(text: tr("神经网络引擎（ANE）", "Neural Engine (ANE)"))
+                Spacer()
+                Circle().fill(ane.inUse ? Color.green : Color.secondary.opacity(0.4)).frame(width: 8, height: 8)
+                Text(ane.inUse ? tr("使用中", "In use") : tr("空闲", "Idle"))
+                    .font(.caption).foregroundStyle(ane.inUse ? .primary : .secondary)
+            }
+            if ane.cores > 0 {
+                Text(tr("\(ane.cores) 核 · 架构 \(ane.architecture)", "\(ane.cores) cores · \(ane.architecture)"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if ane.clients.isEmpty {
+                Text(tr("当前没有进程在使用 ANE", "No process is using the ANE"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            ForEach(ane.clients) { c in
+                HStack {
+                    Text(c.name).lineLimit(1).truncationMode(.middle)
+                    Text("\(c.pid)").font(.caption2).foregroundStyle(.secondary)
+                    Spacer()
+                    Text(tr("\(c.connections) 个连接", "\(c.connections) connections"))
+                        .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                }
+            }
+            Text(tr("macOS 不向普通应用开放 ANE 使用率和功耗，这里显示的是正在连接 ANE 运行模型的进程。",
+                    "macOS doesn't expose ANE utilization or power to regular apps; this lists processes connected to the ANE to run models."))
+                .font(.caption2).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     var body: some View {
         let g = model.gpu
         let util = Double(g.utilization) / 100
@@ -545,6 +579,8 @@ struct GPUTab: View {
                         "Requires an admin password. Leaving too little for macOS can cause stutter."))
                     .font(.caption2).foregroundStyle(.secondary)
             }
+            Divider()
+            neuralEngineSection
             OllamaLoadedSection(model: model)
         }
     }
