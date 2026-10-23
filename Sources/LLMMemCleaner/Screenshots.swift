@@ -57,6 +57,27 @@ enum Screenshots {
         view.layoutSubtreeIfNeeded()
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
         view.cacheDisplay(in: view.bounds, to: rep)
-        try? rep.representation(using: .png, properties: [:])?.write(to: url)
+        try? opaque(rep, appearance: view.window?.appearance)?.representation(using: .png, properties: [:])?.write(to: url)
+    }
+
+    /// The hosting view draws no background, so the capture is transparent and turns black on
+    /// dark-themed pages. Flatten it onto the window background color.
+    private static func opaque(_ rep: NSBitmapImageRep, appearance: NSAppearance?) -> NSBitmapImageRep? {
+        guard let image = rep.cgImage,
+              let ctx = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8,
+                                  bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                  bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        var background = NSColor.windowBackgroundColor.cgColor
+        (appearance ?? NSAppearance(named: .aqua)!).performAsCurrentDrawingAppearance {
+            background = NSColor.windowBackgroundColor.cgColor
+        }
+        let rect = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+        ctx.setFillColor(background)
+        ctx.fill(rect)
+        ctx.draw(image, in: rect)
+        guard let flat = ctx.makeImage() else { return nil }
+        let out = NSBitmapImageRep(cgImage: flat)
+        out.size = rep.size  // keep 2x density metadata
+        return out
     }
 }
