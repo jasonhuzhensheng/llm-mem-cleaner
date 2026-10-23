@@ -6,6 +6,16 @@ macOS 菜单栏工具：在本地运行大模型前，查看并一键释放内�
 
 The menu bar shows a memory-chip icon with available GB; the number turns red above 95% usage.
 
+## Screenshots / 截图
+
+| Memory 内存 | CPU | GPU |
+|---|---|---|
+| ![Memory](docs/screenshots/memory.png) | ![CPU](docs/screenshots/cpu.png) | ![GPU](docs/screenshots/gpu.png) |
+| **Disk 磁盘** | **Network 网络** | **About 关于** |
+| ![Disk](docs/screenshots/disk.png) | ![Network](docs/screenshots/network.png) | ![About](docs/screenshots/about.png) |
+
+Regenerate with `build/LLMMemCleaner.app/Contents/MacOS/LLMMemCleaner --screenshots <dir> [light|dark] [zh|en]`.
+
 ## Features / 功能
 
 | Tab | What it does |

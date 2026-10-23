@@ -560,7 +560,7 @@ struct GPUTab: View {
             OriginGrouped(items: model.gpuClients, origin: \.origin, limit: 10) { c in
                 HStack(spacing: 6) {
                     Text(c.name).lineLimit(1).truncationMode(.middle)
-                    Text("\(c.pid)").font(.caption2).foregroundStyle(.secondary)
+                    Text(verbatim: String(c.pid)).font(.caption2).foregroundStyle(.secondary)
                     Spacer()
                     if let fp = c.footprint {
                         Text(formatBytes(fp)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
@@ -608,7 +608,7 @@ struct GPUTab: View {
             OriginGrouped(items: ane.clients, origin: \.origin) { c in
                 HStack {
                     Text(c.name).lineLimit(1).truncationMode(.middle)
-                    Text("\(c.pid)").font(.caption2).foregroundStyle(.secondary)
+                    Text(verbatim: String(c.pid)).font(.caption2).foregroundStyle(.secondary)
                     Spacer()
                     Text(tr("\(c.connections) 个连接", "\(c.connections) connections"))
                         .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
@@ -1004,7 +1004,7 @@ struct NetworkTab: View {
             OriginGrouped(items: model.processNetwork, origin: \.origin) { p in
                 HStack {
                     Text(p.name).lineLimit(1)
-                    Text("\(p.pid)").font(.caption2).foregroundStyle(.secondary)
+                    Text(verbatim: String(p.pid)).font(.caption2).foregroundStyle(.secondary)
                     Spacer()
                     Text("↓ \(formatRate(p.inPerSec))  ↑ \(formatRate(p.outPerSec))").font(.caption.monospacedDigit())
                     // Two clicks to stop a process: arm, then confirm.

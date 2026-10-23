@@ -6,6 +6,10 @@ import SwiftUI
 struct LLMMemCleanerApp: App {
     @State private var model = MonitorModel()
 
+    init() {
+        Screenshots.runIfRequested()
+    }
+
     var body: some Scene {
         MenuBarExtra {
             ContentView(model: model)
