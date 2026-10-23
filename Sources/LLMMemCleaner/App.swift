@@ -50,6 +50,7 @@ final class MonitorModel {
     var cpu = CPUSampler.Snapshot()
     var gpu = GPUStats()
     var neuralEngine = NeuralEngineStatus()
+    var gpuClients: [GPUClient] = []
     var volume = VolumeInfo()
     var diskIO: (readPerSec: Double, writePerSec: Double) = (0, 0)
     var interfaces: [InterfaceRate] = []
@@ -84,6 +85,7 @@ final class MonitorModel {
     private let netSampler = NetworkSampler()
     private let appSampler = AppSampler()
     private let procNetSampler = ProcessNetworkSampler()
+    private let gpuClientSampler = GPUClientSampler()
     private var timer: Timer?
 
     /// Menu bar icon: a memory chip with available GB printed on it. Stored (not computed) and
@@ -146,6 +148,7 @@ final class MonitorModel {
         case .memory where backgroundExpanded:
             await refreshBackground()
         case .gpu:
+            gpuClients = gpuClientSampler.sample()
             neuralEngine = NeuralEngine.current()
         case .network:
             processNetwork = await procNetSampler.sample()
@@ -177,6 +180,13 @@ final class MonitorModel {
         updateMenuImage()
         await refreshBackground()
         busy = false
+    }
+
+    func stopGPUClient(_ c: GPUClient) {
+        if kill(pid_t(c.pid), SIGTERM) != 0 {
+            message = tr("无法结束 \(c.name)", "Couldn't stop \(c.name)")
+        }
+        gpuClients.removeAll { $0.pid == c.pid }
     }
 
     func refreshBackground() async {

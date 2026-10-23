@@ -497,6 +497,45 @@ struct GPUTab: View {
         }
     }
 
+    @State private var pendingStop: Int?
+
+    private var gpuClientsSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            SectionTitle(text: tr("正在使用 GPU 的进程", "Processes using the GPU"))
+            if model.gpuClients.isEmpty {
+                Text(tr("采样中…或当前没有进程在使用 GPU", "Sampling… or nothing is using the GPU"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            ForEach(model.gpuClients.prefix(10)) { c in
+                HStack(spacing: 6) {
+                    Text(c.name).lineLimit(1).truncationMode(.middle)
+                    Text("\(c.pid)").font(.caption2).foregroundStyle(.secondary)
+                    Spacer()
+                    if let fp = c.footprint {
+                        Text(formatBytes(fp)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                            .help(tr("进程内存（含 GPU 缓冲区）", "Process memory (incl. GPU buffers)"))
+                    }
+                    Text(String(format: "%.1f%%", c.gpu * 100))
+                        .font(.callout.monospacedDigit())
+                        .foregroundStyle(usageColor(c.gpu))
+                        .frame(width: 52, alignment: .trailing)
+                    if c.canStop {
+                        if pendingStop == c.pid {
+                            Button(tr("确认", "Confirm")) { pendingStop = nil; model.stopGPUClient(c) }.tint(.red)
+                            Button(tr("取消", "Cancel")) { pendingStop = nil }
+                        } else {
+                            Button(tr("结束", "Stop")) { pendingStop = c.pid }
+                        }
+                    }
+                }
+                .controlSize(.mini)
+            }
+            Text(tr("GPU % = 该进程占用 GPU 的时间比例，与活动监视器的「GPU %」算法相同。",
+                    "GPU % = share of GPU time, same as Activity Monitor's GPU %."))
+                .font(.caption2).foregroundStyle(.secondary)
+        }
+    }
+
     private var neuralEngineSection: some View {
         let ane = model.neuralEngine
         return VStack(alignment: .leading, spacing: 6) {
@@ -549,6 +588,8 @@ struct GPUTab: View {
             }
             .tint(usageColor(memFrac))
 
+            Divider()
+            gpuClientsSection
             Divider()
             VStack(alignment: .leading, spacing: 6) {
                 SectionTitle(text: tr("GPU 显存上限（统一内存）", "GPU memory limit (unified memory)"))

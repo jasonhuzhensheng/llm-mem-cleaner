@@ -51,7 +51,7 @@ enum NeuralEngine {
                 while child != 0 {
                     // e.g. "pid 9860, mlx-serve"
                     if let creator = property(child, "IOUserClientCreator") as? String,
-                       let client = parseCreator(creator), !ignoredClients.contains(client.name) {
+                       let client = parseUserClientCreator(creator), !ignoredClients.contains(client.name) {
                         byPID[client.pid, default: .init(pid: client.pid, name: client.name, connections: 0)].connections += 1
                     }
                     IOObjectRelease(child)
@@ -60,22 +60,8 @@ enum NeuralEngine {
             }
         }
         status.clients = byPID.values
-            .map { NeuralEngineStatus.Client(pid: $0.pid, name: fullName($0.pid) ?? $0.name, connections: $0.connections) }
+            .map { NeuralEngineStatus.Client(pid: $0.pid, name: executableName($0.pid) ?? $0.name, connections: $0.connections) }
             .sorted { $0.connections > $1.connections }
         return status
-    }
-
-    /// The registry truncates names to 16 chars; the executable path has the real one.
-    private static func fullName(_ pid: Int) -> String? {
-        var buf = [CChar](repeating: 0, count: Int(MAXPATHLEN))
-        guard proc_pidpath(Int32(pid), &buf, UInt32(buf.count)) > 0 else { return nil }
-        return (String(cString: buf) as NSString).lastPathComponent
-    }
-
-    private static func parseCreator(_ s: String) -> (pid: Int, name: String)? {
-        guard s.hasPrefix("pid "), let comma = s.firstIndex(of: ","),
-              let pid = Int(s[s.index(s.startIndex, offsetBy: 4)..<comma]) else { return nil }
-        let name = s[s.index(after: comma)...].trimmingCharacters(in: .whitespaces)
-        return (pid, name)
     }
 }
