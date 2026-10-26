@@ -5,7 +5,14 @@ enum Ollama {
     struct LoadedModel: Decodable, Identifiable {
         let name: String
         let size: UInt64
+        /// Only reported by /api/ps for loaded models.
+        let contextLength: Int?
         var id: String { name }
+
+        enum CodingKeys: String, CodingKey {
+            case name, size
+            case contextLength = "context_length"
+        }
     }
 
     private struct PSResponse: Decodable { let models: [LoadedModel] }

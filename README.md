@@ -42,6 +42,7 @@ Regenerate with `build/LLMMemCleaner.app/Contents/MacOS/LLMMemCleaner --screensh
 | Tab | What it does |
 |---|---|
 | **Memory 内存** | Available memory, pressure, swap; which model sizes fit (Q4 estimate, GPU limit aware); per-app memory (helpers grouped) with one-click quit; unload Ollama models |
+| **Models 模型** | LLMs currently loaded by Ollama, LM Studio, MLX-Serve, llama.cpp or mlx-lm with memory, file size and context length; warns when the same model is loaded twice or the context is huge; one-click unload (or unload all) |
 | **CPU** | Total and per-core usage, load average; per-app CPU with one-click quit |
 | **GPU** | Utilization, GPU memory in use, unified-memory wired limit with 85% / 87.5% / 90% / custom presets (`iogpu.wired_limit_mb`, admin, resets on reboot) |
 | **Disk 磁盘** | Free space, read/write throughput, per-app disk I/O; scan Ollama / Hugging Face / LM Studio models and caches; one-click cache cleaning |

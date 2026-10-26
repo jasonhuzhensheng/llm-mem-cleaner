@@ -24,7 +24,7 @@ enum Screenshots {
         let model = MonitorModel()
         model.language = L10n.current
         let hosting = NSHostingView(rootView: ContentView(model: model, fullHeight: true))
-        let window = NSWindow(contentRect: NSRect(x: -10_000, y: -10_000, width: 440, height: 640),
+        let window = NSWindow(contentRect: NSRect(x: -10_000, y: -10_000, width: 460, height: 640),
                               styleMask: [.borderless], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         window.backgroundColor = .windowBackgroundColor
@@ -52,8 +52,8 @@ enum Screenshots {
         // Size the window to the tab's natural height so nothing is cut off or padded.
         view.layoutSubtreeIfNeeded()
         let height = max(view.fittingSize.height, 200)
-        view.window?.setContentSize(NSSize(width: 440, height: height))
-        view.setFrameSize(NSSize(width: 440, height: height))
+        view.window?.setContentSize(NSSize(width: 460, height: height))
+        view.setFrameSize(NSSize(width: 460, height: height))
         view.layoutSubtreeIfNeeded()
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
         view.cacheDisplay(in: view.bounds, to: rep)

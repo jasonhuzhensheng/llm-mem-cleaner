@@ -21,12 +21,13 @@ struct LLMMemCleanerApp: App {
 }
 
 enum Tab: String, CaseIterable, Identifiable {
-    case memory, cpu, gpu, disk, network, startup
+    case memory, models, cpu, gpu, disk, network, startup
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .memory: tr("内存", "Memory")
+        case .models: tr("模型", "Models")
         case .cpu: "CPU"
         case .gpu: "GPU"
         case .disk: tr("磁盘", "Disk")
@@ -55,6 +56,8 @@ final class MonitorModel {
     var gpu = GPUStats()
     var neuralEngine = NeuralEngineStatus()
     var gpuClients: [GPUClient] = []
+    var runningModels: [RunningModel]?
+    var unloading: Set<String> = []
     var volume = VolumeInfo()
     var diskIO: (readPerSec: Double, writePerSec: Double) = (0, 0)
     var interfaces: [InterfaceRate] = []
@@ -151,6 +154,8 @@ final class MonitorModel {
         switch tab {
         case .memory where backgroundExpanded:
             await refreshBackground()
+        case .models:
+            runningModels = await RunningModels.scan()
         case .gpu:
             gpuClients = gpuClientSampler.sample()
             neuralEngine = NeuralEngine.current()
@@ -184,6 +189,22 @@ final class MonitorModel {
         updateMenuImage()
         await refreshBackground()
         busy = false
+    }
+
+    func unloadModels(_ models: [RunningModel]) async {
+        unloading.formUnion(models.map(\.id))
+        let before = stats.available
+        var failed: [String] = []
+        for m in models where !(await RunningModels.unload(m)) { failed.append(m.name) }
+        try? await Task.sleep(for: .seconds(1.5))  // let the runtime release its memory
+        stats = MemoryStats.current()
+        updateMenuImage()
+        runningModels = await RunningModels.scan()
+        unloading.subtract(models.map(\.id))
+        let freed = stats.available > before ? stats.available - before : 0
+        message = failed.isEmpty
+            ? tr("已卸载，释放约 \(formatBytes(freed))", "Unloaded; freed ~\(formatBytes(freed))")
+            : tr("未能卸载：\(failed.joined(separator: "、"))", "Couldn't unload: \(failed.joined(separator: ", "))")
     }
 
     func stopGPUClient(_ c: GPUClient) {

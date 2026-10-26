@@ -35,7 +35,7 @@ struct ContentView: View {
             footer
         }
         .padding(14)
-        .frame(width: 440)
+        .frame(width: 460)
         // tr() isn't observable, so rebuild the whole panel when the language changes.
         .id(model.language)
         .onAppear { model.panelOpen = true }
@@ -56,6 +56,7 @@ struct ContentView: View {
             } else {
                 switch model.tab {
                 case .memory: MemoryTab(model: model)
+                case .models: ModelsTab(model: model)
                 case .cpu: CPUTab(model: model)
                 case .gpu: GPUTab(model: model)
                 case .disk: DiskTab(model: model)
