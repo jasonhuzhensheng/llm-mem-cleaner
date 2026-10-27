@@ -57,6 +57,7 @@ final class MonitorModel {
     var neuralEngine = NeuralEngineStatus()
     var gpuClients: [GPUClient] = []
     var runningModels: [RunningModel]?
+    var llmServices: [LLMService] = []
     var unloading: Set<String> = []
     var volume = VolumeInfo()
     var diskIO: (readPerSec: Double, writePerSec: Double) = (0, 0)
@@ -156,6 +157,7 @@ final class MonitorModel {
             await refreshBackground()
         case .models:
             runningModels = await RunningModels.scan()
+            llmServices = LLMServices.scan()
         case .gpu:
             gpuClients = gpuClientSampler.sample()
             neuralEngine = NeuralEngine.current()
@@ -200,11 +202,26 @@ final class MonitorModel {
         stats = MemoryStats.current()
         updateMenuImage()
         runningModels = await RunningModels.scan()
+        llmServices = LLMServices.scan()
         unloading.subtract(models.map(\.id))
         let freed = stats.available > before ? stats.available - before : 0
         message = failed.isEmpty
             ? tr("已卸载，释放约 \(formatBytes(freed))", "Unloaded; freed ~\(formatBytes(freed))")
             : tr("未能卸载：\(failed.joined(separator: "、"))", "Couldn't unload: \(failed.joined(separator: ", "))")
+    }
+
+    func stopService(_ s: LLMService) async {
+        unloading.insert(s.id)
+        let before = stats.available
+        let ok = await LLMServices.stop(s)
+        stats = MemoryStats.current()
+        updateMenuImage()
+        runningModels = await RunningModels.scan()
+        llmServices = LLMServices.scan()
+        unloading.remove(s.id)
+        let freed = stats.available > before ? stats.available - before : 0
+        message = ok ? tr("已停止 \(s.name)，释放约 \(formatBytes(freed))", "Stopped \(s.name); freed ~\(formatBytes(freed))")
+            : tr("\(s.name) 未完全停止（可能会被自动重启）", "\(s.name) didn't fully stop (it may be restarted automatically)")
     }
 
     func stopGPUClient(_ c: GPUClient) {

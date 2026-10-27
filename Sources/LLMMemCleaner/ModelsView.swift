@@ -24,8 +24,11 @@ struct ModelsTab: View {
             if model.runningModels == nil {
                 ProgressView(tr("正在检测…", "Detecting…")).controlSize(.small)
             } else if models.isEmpty {
-                Text(tr("当前没有大模型在运行。", "No models are loaded right now."))
+                Text(model.llmServices.isEmpty
+                     ? tr("当前没有大模型在运行。", "No models are loaded right now.")
+                     : tr("当前没有加载模型，但下面的服务仍在运行、占用内存。", "No models are loaded, but the services below are still running and using memory."))
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 unloadAllButton(models)
                 ForEach(models) { m in
@@ -34,9 +37,13 @@ struct ModelsTab: View {
                 }
             }
 
+            if !model.llmServices.isEmpty {
+                servicesSection
+            }
+
             Divider()
-            Text(tr("支持 Ollama、LM Studio、MLX-Serve、llama.cpp、mlx-lm。Ollama 和 LM Studio 卸载后服务继续运行；其他是独立服务，卸载即停止该服务。内存为进程实际占用，按需从磁盘映射的权重不计入。",
-                    "Detects Ollama, LM Studio, MLX-Serve, llama.cpp and mlx-lm. Ollama and LM Studio keep serving after an unload; the others are standalone servers, so unloading stops them. Memory is the process footprint; weights memory-mapped from disk aren't counted."))
+            Text(tr("支持 Ollama、LM Studio、MLX-Serve、llama.cpp、mlx-lm、Kapitsa，以及其他带 --model 参数、占用 1GB 以上的模型服务。Ollama 和 LM Studio 卸载后服务继续运行；其他是独立服务，卸载即停止该服务。内存为进程实际占用，按需从磁盘映射的权重不计入。",
+                    "Detects Ollama, LM Studio, MLX-Serve, llama.cpp, mlx-lm, Kapitsa, and other servers started with --model that use over 1 GB. Ollama and LM Studio keep serving after an unload; the others are standalone servers, so unloading stops them. Memory is the process footprint; weights memory-mapped from disk aren't counted."))
                 .font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -47,7 +54,7 @@ struct ModelsTab: View {
     private func row(_ m: RunningModel) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
-                Text(m.runtime.rawValue)
+                Text(m.engine ?? m.runtime.rawValue)
                     .font(.caption2.bold())
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(Capsule().fill(color(m.runtime).opacity(0.2)))
@@ -58,8 +65,8 @@ struct ModelsTab: View {
             }
             Text(details(m)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             if let ctx = m.contextLength, ctx >= 131_072 {
-                Text(tr("上下文 \(contextLabel(ctx)) 会占用大量内存，日常 32K 通常够用，可在 \(m.runtime.rawValue) 里调小。",
-                        "A \(contextLabel(ctx)) context uses a lot of memory; 32K is usually enough — lower it in \(m.runtime.rawValue)."))
+                Text(tr("上下文 \(contextLabel(ctx)) 会占用大量内存，日常 32K 通常够用，可在 \(m.engine ?? m.runtime.rawValue) 里调小。",
+                        "A \(contextLabel(ctx)) context uses a lot of memory; 32K is usually enough — lower it in \(m.engine ?? m.runtime.rawValue)."))
                     .font(.caption2).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -107,6 +114,68 @@ struct ModelsTab: View {
         }
     }
 
+    // MARK: Services
+
+    private var servicesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionTitle(text: tr("运行中的服务（前台 + 后台）", "Running services (foreground + background)"))
+            ForEach(model.llmServices) { s in
+                HStack(spacing: 8) {
+                    Text(s.name)
+                        .font(.caption2.bold())
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Capsule().fill(color(s.runtime).opacity(0.2)))
+                        .foregroundStyle(color(s.runtime))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(placement(s)).font(.callout)
+                        Text(serviceDetails(s)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                            .lineLimit(1).truncationMode(.tail)
+                    }
+                    Spacer()
+                    serviceAction(s)
+                }
+            }
+            Text(tr("停止服务会退出应用并关闭后台进程，已加载的模型一并释放。通过 brew services 或登录项启动的服务可能会被自动重启，可在「启动项」里关闭。",
+                    "Stopping quits the app and shuts down its background processes, releasing any loaded models. Services started by brew services or login items may restart; turn them off under Startup."))
+                .font(.caption2).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func placement(_ s: LLMService) -> String {
+        switch (s.hasApp, s.hasDaemon) {
+        case (true, true): tr("前台应用 + 后台服务", "App + background service")
+        case (true, false): tr("前台应用", "App")
+        default: tr("后台服务（无窗口）", "Background service (no window)")
+        }
+    }
+
+    private func serviceDetails(_ s: LLMService) -> String {
+        let loaded = (model.runningModels ?? []).filter { $0.runtime == s.runtime }.count
+        var parts = [tr("内存 ", "Memory ") + formatBytes(s.memory),
+                     tr("\(s.pids.count) 个进程", "\(s.pids.count) processes"),
+                     tr("已加载 \(loaded) 个模型", "\(loaded) loaded")]
+        if s.hasDaemon { parts.append(s.daemons.joined(separator: ", ")) }
+        return parts.joined(separator: " · ")
+    }
+
+    @ViewBuilder private func serviceAction(_ s: LLMService) -> some View {
+        let key = "service|" + s.id
+        if model.unloading.contains(s.id) {
+            ProgressView().controlSize(.small)
+        } else if pending == key {
+            Button(tr("确认", "Confirm")) {
+                pending = nil
+                Task { await model.stopService(s) }
+            }
+            .tint(.red)
+            .controlSize(.small)
+            Button(tr("取消", "Cancel")) { pending = nil }.controlSize(.small)
+        } else {
+            Button(tr("停止", "Stop")) { pending = key }.controlSize(.small)
+        }
+    }
+
     // MARK: Duplicates
 
     /// Same family + size loaded more than once (e.g. by both Ollama and LM Studio).
@@ -137,6 +206,11 @@ struct ModelsTab: View {
         if let size = m.fileSize { parts.append(tr("文件 ", "File ") + formatBytes(size)) }
         if let ctx = m.contextLength { parts.append(tr("上下文 ", "Context ") + contextLabel(ctx)) }
         if let port = m.port { parts.append(tr("端口 ", "Port ") + String(port)) }
+        if let s = model.llmServices.first(where: { $0.runtime == m.runtime && $0.runtime != .other }) {
+            parts.append(s.hasApp ? tr("前台", "Foreground") : tr("后台", "Background"))
+        } else if !m.runtime.unloadsInPlace {
+            parts.append(tr("后台进程", "Background process"))
+        }
         return parts.joined(separator: " · ")
     }
 
@@ -151,6 +225,7 @@ struct ModelsTab: View {
         case .mlxServe: .green
         case .llamaCpp: .orange
         case .mlxLM: .teal
+        case .kapitsa: .pink
         case .other: .gray
         }
     }

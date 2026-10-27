@@ -9,6 +9,7 @@ struct RunningModel: Identifiable {
         case mlxServe = "MLX-Serve"
         case llamaCpp = "llama.cpp"
         case mlxLM = "mlx-lm"
+        case kapitsa = "Kapitsa"
         case other = "Other"
 
         /// Runtimes that can drop a model without stopping their server.
@@ -16,6 +17,8 @@ struct RunningModel: Identifiable {
     }
 
     let runtime: Runtime
+    /// Shown instead of the runtime name for engines found by the generic rule.
+    var engine: String?
     let name: String
     /// Ollama model name or LM Studio identifier; empty for server processes.
     let unloadKey: String
@@ -65,7 +68,8 @@ enum RunningModels {
         let claimed = Set(result.flatMap(\.pids))
         for p in servers where !claimed.contains(p.pid) && p.runtime != .ollama && p.runtime != .lmStudio {
             let name = p.modelPath.map { prettyModelName($0) } ?? p.executable
-            result.append(RunningModel(runtime: p.runtime, name: name, unloadKey: "",
+            result.append(RunningModel(runtime: p.runtime, engine: p.runtime == .other ? p.executable : nil,
+                                       name: name, unloadKey: "",
                                        contextLength: p.contextLength,
                                        fileSize: p.modelPath.flatMap(fileSize),
                                        memory: p.memory, pids: [p.pid], port: p.port))
@@ -100,7 +104,9 @@ enum RunningModels {
         var ollamaName: String?
     }
 
-    private static let serverExecutables: Set<String> = ["llama-server", "mlx-serve", "llama-box", "koboldcpp"]
+    private static let serverExecutables: Set<String> = ["llama-server", "mlx-serve", "llama-box", "koboldcpp", "kapitsa"]
+    /// Unknown engines count when they use this much memory and look like a model server.
+    private static let genericMinFootprint: UInt64 = 1 << 30
 
     static func serverProcesses() -> [ServerProcess] {
         var out: [ServerProcess] = []
@@ -108,22 +114,26 @@ enum RunningModels {
             guard let path = executablePath(Int(pid)) else { continue }
             let exe = (path as NSString).lastPathComponent
             let isPython = exe.hasPrefix("python")
-            guard serverExecutables.contains(exe) || isPython else { continue }
+            let known = serverExecutables.contains(exe) || isPython
+            let footprint = AppSampler.rusage(pid)?.ri_phys_footprint
+            guard known || (footprint ?? 0) >= genericMinFootprint else { continue }
             guard let args = processArguments(Int(pid)) else { continue }
             if isPython && !args.contains(where: { $0.contains("mlx_lm") || $0.contains("vllm") }) { continue }
+            if !known && !(flag(args, ["--model", "-m"]) != nil && (args.contains("serve") || flag(args, ["--port"]) != nil)) { continue }
 
             let runtime: RunningModel.Runtime =
                 path.contains("Ollama.app") || path.contains("/ollama") ? .ollama
                 : path.contains("/.lmstudio/") ? .lmStudio
                 : path.contains("MLX-Serve") || exe == "mlx-serve" ? .mlxServe
                 : isPython && args.contains(where: { $0.contains("mlx_lm") }) ? .mlxLM
-                : exe == "llama-server" ? .llamaCpp : .other
+                : exe == "llama-server" ? .llamaCpp
+                : exe == "kapitsa" ? .kapitsa : .other
             let model = flag(args, ["--model", "-m"])
             var proc = ServerProcess(
                 pid: Int(pid), executable: exe, runtime: runtime, modelPath: model,
-                contextLength: flag(args, ["--ctx-size", "-c", "--max-kv-size", "--max-model-len"]).flatMap { Int($0) },
+                contextLength: flag(args, ["--ctx-size", "-c", "--context", "--max-kv-size", "--max-model-len"]).flatMap(tokenCount),
                 port: flag(args, ["--port"]).flatMap { Int($0) },
-                memory: AppSampler.rusage(pid)?.ri_phys_footprint)
+                memory: footprint)
             if runtime == .ollama, let model { proc.ollamaName = ollamaName(forBlob: model) }
             out.append(proc)
         }
@@ -149,6 +159,18 @@ enum RunningModels {
             i += 1
         }
         return args
+    }
+
+    /// "32768", "32k" or "1m" → tokens.
+    static func tokenCount(_ s: String) -> Int? {
+        let l = s.lowercased()
+        if let n = Int(l) { return n }
+        guard let unit = l.last, let n = Double(l.dropLast()) else { return nil }
+        switch unit {
+        case "k": return Int(n * 1024)
+        case "m": return Int(n * 1024 * 1024)
+        default: return nil
+        }
     }
 
     /// Value of `--name value` or `--name=value`.
