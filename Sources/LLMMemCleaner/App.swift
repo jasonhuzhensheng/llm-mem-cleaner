@@ -59,6 +59,12 @@ final class MonitorModel {
     var runningModels: [RunningModel]?
     var llmServices: [LLMService] = []
 
+    // System-level tweaks; loaded when the section is expanded.
+    var systemTweaks: SystemTweaks?
+    var systemExpanded = false {
+        didSet { if systemExpanded && !oldValue { Task { await reloadSystemTweaks() } } }
+    }
+
     // Smart optimize
     var optimizeCandidates: [OptimizeCandidate]?
     var optimizeSelection: Set<String> = []
@@ -237,6 +243,22 @@ final class MonitorModel {
         let freed = stats.available > before ? stats.available - before : 0
         message = ok ? tr("已停止 \(s.name)，释放约 \(formatBytes(freed))", "Stopped \(s.name); freed ~\(formatBytes(freed))")
             : tr("\(s.name) 未完全停止（可能会被自动重启）", "\(s.name) didn't fully stop (it may be restarted automatically)")
+    }
+
+    // MARK: System tweaks
+
+    func reloadSystemTweaks() async {
+        systemTweaks = await SystemTweaksService.load()
+    }
+
+    /// Runs a tweak, reports failure, then re-reads the state so the switches show what really happened.
+    func applyTweak(_ failure: String, _ action: () async -> Bool) async {
+        busy = true
+        if !(await action()) { message = failure }
+        await reloadSystemTweaks()
+        stats = MemoryStats.current()
+        updateMenuImage()
+        busy = false
     }
 
     // MARK: Smart optimize

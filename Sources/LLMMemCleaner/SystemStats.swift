@@ -61,6 +61,7 @@ struct GPUStats {
     var cores = 0
     var utilization = 0           // Device Utilization %
     var inUseMemory: UInt64 = 0   // memory currently held by GPU clients
+    var allocatedMemory: UInt64 = 0  // memory the driver has allocated (≥ in use; pools aren't returned)
     var wiredLimit: UInt64 = 0    // max memory the GPU may wire (unified memory)
     var wiredLimitIsDefault = true
 
@@ -82,6 +83,7 @@ struct GPUStats {
             if let perf = property(service, "PerformanceStatistics") as? [String: Any] {
                 stats.utilization = (perf["Device Utilization %"] as? NSNumber)?.intValue ?? 0
                 stats.inUseMemory = (perf["In use system memory"] as? NSNumber)?.uint64Value ?? 0
+                stats.allocatedMemory = (perf["Alloc system memory"] as? NSNumber)?.uint64Value ?? 0
             }
         }
 

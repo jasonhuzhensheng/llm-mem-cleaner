@@ -356,6 +356,7 @@ struct MemoryTab: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             OptimizeSection(model: model)
+            SystemTweaksSection(model: model)
             Divider()
             tiers
             Divider()
