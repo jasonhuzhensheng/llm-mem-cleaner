@@ -355,6 +355,7 @@ struct MemoryTab: View {
                         "Available \(formatBytes(s.available)) · Wired \(formatBytes(s.wired)) · Compressed \(formatBytes(s.compressed)) · Swap \(formatBytes(s.swapUsed))"))
                     .font(.caption).foregroundStyle(.secondary)
             }
+            OptimizeSection(model: model)
             Divider()
             tiers
             Divider()

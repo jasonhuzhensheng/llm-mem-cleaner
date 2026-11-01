@@ -58,6 +58,20 @@ final class MonitorModel {
     var gpuClients: [GPUClient] = []
     var runningModels: [RunningModel]?
     var llmServices: [LLMService] = []
+
+    // Smart optimize
+    var optimizeCandidates: [OptimizeCandidate]?
+    var optimizeSelection: Set<String> = []
+    var optimizeScanning = false
+    var optimizing = false
+    var autoOptimize = UserDefaults.standard.bool(forKey: "autoOptimize") {
+        didSet { UserDefaults.standard.set(autoOptimize, forKey: "autoOptimize") }
+    }
+    /// Auto mode kicks in at this fraction of memory used.
+    static let autoOptimizeThreshold = 0.85
+    private let idleTracker = IdleTracker()
+    private var lastAutoCheck = Date.distantPast
+    private var lastAutoRun = Date.distantPast
     var unloading: Set<String> = []
     var volume = VolumeInfo()
     var diskIO: (readPerSec: Double, writePerSec: Double) = (0, 0)
@@ -128,6 +142,7 @@ final class MonitorModel {
             updateMenuImage()
         }
         if panelOpen { sampleDetails() }
+        if autoOptimize { Task { await autoOptimizeIfNeeded() } }
     }
 
     private func updateMenuImage() {
@@ -222,6 +237,74 @@ final class MonitorModel {
         let freed = stats.available > before ? stats.available - before : 0
         message = ok ? tr("已停止 \(s.name)，释放约 \(formatBytes(freed))", "Stopped \(s.name); freed ~\(formatBytes(freed))")
             : tr("\(s.name) 未完全停止（可能会被自动重启）", "\(s.name) didn't fully stop (it may be restarted automatically)")
+    }
+
+    // MARK: Smart optimize
+
+    func scanOptimize() async {
+        optimizeScanning = true
+        let models = await RunningModels.scan()
+        runningModels = models
+        llmServices = LLMServices.scan()
+        apps = appSampler.sample()
+        let found = await MemoryOptimizer.candidates(models: models, services: llmServices, apps: apps, tracker: idleTracker)
+        optimizeCandidates = found
+        optimizeSelection = Set(found.filter(\.recommended).map(\.id))
+        optimizeScanning = false
+    }
+
+    var optimizeSelectedBytes: UInt64 {
+        (optimizeCandidates ?? []).filter { optimizeSelection.contains($0.id) }.reduce(0) { $0 + $1.memory }
+    }
+
+    func runOptimize() async {
+        let chosen = (optimizeCandidates ?? []).filter { optimizeSelection.contains($0.id) }
+        message = await optimize(chosen)
+        optimizeCandidates = nil
+        optimizeSelection = []
+    }
+
+    /// Runs the candidates and reports what was freed.
+    private func optimize(_ chosen: [OptimizeCandidate]) async -> String {
+        optimizing = true
+        let before = stats.available
+        var failed: [String] = []
+        for c in chosen where !(await MemoryOptimizer.run(c)) { failed.append(c.title) }
+        try? await Task.sleep(for: .seconds(1.5))
+        stats = MemoryStats.current()
+        updateMenuImage()
+        runningModels = await RunningModels.scan()
+        llmServices = LLMServices.scan()
+        optimizing = false
+        let freed = stats.available > before ? stats.available - before : 0
+        return tr("已优化 \(chosen.count - failed.count) 项，释放约 \(formatBytes(freed))", "Optimized \(chosen.count - failed.count) items; freed ~\(formatBytes(freed))")
+            + (failed.isEmpty ? "" : tr("。未完成：\(failed.joined(separator: "、"))", ". Not done: \(failed.joined(separator: ", "))"))
+    }
+
+    /// Every 30 s while memory is tight: track idle CPU, and at most every 10 min stop what's idle
+    /// and safe to stop automatically (models, model services, VMs).
+    private func autoOptimizeIfNeeded() async {
+        let usedFrac = stats.total > 0 ? Double(stats.used) / Double(stats.total) : 0
+        guard usedFrac >= Self.autoOptimizeThreshold || stats.pressure != .normal,
+              Date().timeIntervalSince(lastAutoCheck) >= 30, !optimizing else { return }
+        lastAutoCheck = Date()
+        let models = await RunningModels.scan()
+        let services = LLMServices.scan()
+        let found = await MemoryOptimizer.candidates(models: models, services: services, apps: [], tracker: idleTracker)
+        // Wait for a few minutes of history before calling anything idle.
+        let pids = found.flatMap { c -> [pid_t] in
+            switch c.action {
+            case .unloadModel(let m): m.pids.map(pid_t.init)
+            case .stopService(let s): s.pids.map(pid_t.init)
+            default: []
+            }
+        }
+        guard idleTracker.cpu(pids, minSpan: 120) != nil, Date().timeIntervalSince(lastAutoRun) >= 600 else { return }
+        let auto = found.filter(\.automatic)
+        guard !auto.isEmpty else { return }
+        lastAutoRun = Date()
+        message = tr("内存紧张，已自动处理：", "Memory was tight; automatically handled: ")
+            + auto.map(\.title).joined(separator: tr("、", ", ")) + "。" + (await optimize(auto))
     }
 
     func stopGPUClient(_ c: GPUClient) {

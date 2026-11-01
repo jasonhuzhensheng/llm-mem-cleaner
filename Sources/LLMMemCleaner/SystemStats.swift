@@ -255,11 +255,17 @@ enum Shell {
     struct Result { let status: Int32; let output: String }
 
     /// Runs a binary off the main thread and captures stdout+stderr.
-    static func run(_ exe: String, _ args: [String]) async -> Result? {
+    static func run(_ exe: String, _ args: [String], path extraPath: String? = nil) async -> Result? {
         await Task.detached {
             let p = Process()
             p.executableURL = URL(fileURLWithPath: exe)
             p.arguments = args
+            if let extraPath {
+                // Apps launched from Finder get a minimal PATH; tools like colima call limactl/docker by name.
+                var env = ProcessInfo.processInfo.environment
+                env["PATH"] = extraPath + ":" + (env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin")
+                p.environment = env
+            }
             let pipe = Pipe()
             p.standardOutput = pipe
             p.standardError = pipe
