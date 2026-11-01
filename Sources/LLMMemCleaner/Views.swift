@@ -336,14 +336,14 @@ struct MemoryTab: View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Text(tr("可用内存", "Available memory")).font(.headline)
+                    Text(tr("已用内存", "Memory used")).font(.headline)
                     Spacer()
                     Circle().fill(pressureColor).frame(width: 8, height: 8)
                     Text(tr("压力余量 \(s.pressureFreePercent)%", "Pressure headroom \(s.pressureFreePercent)%"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 HStack(alignment: .firstTextBaseline) {
-                    Text("\(formatBytes(s.available)) / \(formatBytes(s.total))")
+                    Text("\(formatBytes(s.used)) / \(formatBytes(s.total))")
                         .font(.system(size: 22, weight: .semibold, design: .rounded))
                     Spacer()
                     Text(tr("已用 \(Int(usedFrac * 100))%", "\(Int(usedFrac * 100))% used"))
@@ -351,8 +351,8 @@ struct MemoryTab: View {
                         .foregroundStyle(usageColor(usedFrac))
                 }
                 ProgressView(value: usedFrac).tint(usageColor(usedFrac))
-                Text(tr("联动 \(formatBytes(s.wired)) · 压缩 \(formatBytes(s.compressed)) · Swap \(formatBytes(s.swapUsed))",
-                        "Wired \(formatBytes(s.wired)) · Compressed \(formatBytes(s.compressed)) · Swap \(formatBytes(s.swapUsed))"))
+                Text(tr("可用 \(formatBytes(s.available)) · 联动 \(formatBytes(s.wired)) · 压缩 \(formatBytes(s.compressed)) · Swap \(formatBytes(s.swapUsed))",
+                        "Available \(formatBytes(s.available)) · Wired \(formatBytes(s.wired)) · Compressed \(formatBytes(s.compressed)) · Swap \(formatBytes(s.swapUsed))"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             Divider()
