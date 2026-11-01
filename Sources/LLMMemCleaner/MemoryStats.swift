@@ -1,10 +1,13 @@
 import Darwin
 import Foundation
 
-/// System-wide memory snapshot, computed the same way Activity Monitor does.
+/// System-wide memory snapshot: Activity Monitor's formula, minus memory apps have already freed.
 struct MemoryStats {
     var total: UInt64
-    var used: UInt64        // app + wired + compressed
+    var used: UInt64        // app + wired + compressed, excluding reclaimable
+    /// Pages processes freed with MADV_FREE_REUSABLE (malloc does this). Still mapped, so Activity
+    /// Monitor counts them as app memory, but macOS takes them back instantly when needed.
+    var reclaimable: UInt64 = 0
     var wired: UInt64
     var compressed: UInt64
     var swapUsed: UInt64
@@ -33,12 +36,18 @@ struct MemoryStats {
             }
         }
 
-        var used: UInt64 = 0, wired: UInt64 = 0, compressed: UInt64 = 0
+        var reusablePages: UInt32 = 0
+        var reusableSize = MemoryLayout<UInt32>.size
+        sysctlbyname("vm.page_reusable_count", &reusablePages, &reusableSize, nil, 0)
+
+        var used: UInt64 = 0, wired: UInt64 = 0, compressed: UInt64 = 0, reclaimable: UInt64 = 0
         if kr == KERN_SUCCESS {
             let app = UInt64(vm.internal_page_count) - UInt64(vm.purgeable_count)
+            let reusable = min(UInt64(reusablePages), app)
             wired = UInt64(vm.wire_count) * pageSize
             compressed = UInt64(vm.compressor_page_count) * pageSize
-            used = app * pageSize + wired + compressed
+            reclaimable = reusable * pageSize
+            used = (app - reusable) * pageSize + wired + compressed
         }
 
         var swap = xsw_usage()
@@ -49,7 +58,7 @@ struct MemoryStats {
         var levelSize = MemoryLayout<Int32>.size
         sysctlbyname("kern.memorystatus_level", &level, &levelSize, nil, 0)
 
-        return MemoryStats(total: total, used: used, wired: wired, compressed: compressed,
+        return MemoryStats(total: total, used: used, reclaimable: reclaimable, wired: wired, compressed: compressed,
                            swapUsed: swap.xsu_used, pressureFreePercent: Int(level))
     }
 }

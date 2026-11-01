@@ -351,8 +351,8 @@ struct MemoryTab: View {
                         .foregroundStyle(usageColor(usedFrac))
                 }
                 ProgressView(value: usedFrac).tint(usageColor(usedFrac))
-                Text(tr("可用 \(formatBytes(s.available)) · 联动 \(formatBytes(s.wired)) · 压缩 \(formatBytes(s.compressed)) · Swap \(formatBytes(s.swapUsed))",
-                        "Available \(formatBytes(s.available)) · Wired \(formatBytes(s.wired)) · Compressed \(formatBytes(s.compressed)) · Swap \(formatBytes(s.swapUsed))"))
+                Text(tr("可用 \(formatBytes(s.available))（含可立即回收 \(formatBytes(s.reclaimable))）· 联动 \(formatBytes(s.wired)) · 压缩 \(formatBytes(s.compressed)) · Swap \(formatBytes(s.swapUsed))",
+                        "Available \(formatBytes(s.available)) (incl. \(formatBytes(s.reclaimable)) reclaimable) · Wired \(formatBytes(s.wired)) · Compressed \(formatBytes(s.compressed)) · Swap \(formatBytes(s.swapUsed))"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             OptimizeSection(model: model)
