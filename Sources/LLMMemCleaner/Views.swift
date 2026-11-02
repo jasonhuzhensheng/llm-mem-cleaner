@@ -95,10 +95,8 @@ struct ContentView: View {
             Button {
                 model.showAbout.toggle()
             } label: {
-                Image(systemName: model.showAbout ? "info.circle.fill" : "info.circle")
+                Text(tr("关于", "About"))
             }
-            .buttonStyle(.borderless)
-            .help(tr("关于", "About"))
             Button(tr("退出", "Quit")) { NSApp.terminate(nil) }
         }
         .controlSize(.small)
@@ -131,12 +129,52 @@ struct AboutView: View {
 
             Divider()
             SectionTitle(text: tr("作者", "Author"))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(tr("大老二 胡震生", "Big2 · Hu Zhensheng")).font(.headline)
+                Text("0xBig2").font(.caption.monospaced()).foregroundStyle(.secondary)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Label(tr("做 AI 和加密货币工具的开发者", "Builder of AI & crypto tools"), systemImage: "hammer")
+                Label(tr("微拍（Weipai）前创始人", "Ex-founder of Weipai (微拍)"), systemImage: "video")
+            }
+            .font(.callout)
             Link(destination: Self.xURL) {
-                Label("@HUZHENSHENG", systemImage: "at")
+                Label("X @HUZHENSHENG", systemImage: "at")
             }
             .help(Self.xURL.absoluteString)
             Text(tr("在 X 上关注，获取更新和反馈问题。", "Follow on X for updates and feedback."))
                 .font(.caption).foregroundStyle(.secondary)
+
+            Divider()
+            SectionTitle(text: tr("更新", "Updates"))
+            HStack {
+                if let r = model.updateAvailable {
+                    Text(tr("新版本 \(r.version) 可用", "Version \(r.version) is available")).font(.callout)
+                    Spacer()
+                    Button(model.installingUpdate ? tr("正在更新…", "Updating…") : tr("立即更新", "Update now")) {
+                        Task { await model.installUpdate() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(model.installingUpdate)
+                } else {
+                    Text(model.updateStatus ?? tr("当前版本 \(version)", "Current version \(version)"))
+                        .font(.callout).foregroundStyle(.secondary)
+                    Spacer()
+                    Button(model.checkingUpdate ? tr("正在检查…", "Checking…") : tr("检查更新", "Check now")) {
+                        Task { await model.checkForUpdate() }
+                    }
+                    .disabled(model.checkingUpdate)
+                }
+            }
+            .controlSize(.small)
+            if let r = model.updateAvailable, !r.notes.isEmpty {
+                Text(r.notes).font(.caption).foregroundStyle(.secondary).lineLimit(6)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Toggle(tr("自动更新（每 6 小时检查，发现新版本在面板关闭时自动安装并重启）",
+                      "Auto-update (checks every 6 hours; installs and relaunches while the panel is closed)"),
+                   isOn: $model.autoUpdate)
+                .toggleStyle(.checkbox).font(.caption)
 
             Divider()
             SectionTitle(text: tr("源代码", "Source code"))

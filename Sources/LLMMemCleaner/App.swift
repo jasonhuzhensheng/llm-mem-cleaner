@@ -60,6 +60,17 @@ final class MonitorModel {
     var runningModels: [RunningModel]?
     var llmServices: [LLMService] = []
 
+    // Updates
+    var updateAvailable: Updater.Release?
+    var updateStatus: String?
+    var checkingUpdate = false
+    var installingUpdate = false
+    var autoUpdate = UserDefaults.standard.object(forKey: "autoUpdate") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(autoUpdate, forKey: "autoUpdate") }
+    }
+    private var lastUpdateCheck = Date.distantPast
+    private static let updateInterval: TimeInterval = 6 * 3600
+
     // System-level tweaks; loaded when the section is expanded.
     var systemTweaks: SystemTweaks?
     var systemExpanded = false {
@@ -150,6 +161,31 @@ final class MonitorModel {
         }
         if panelOpen { sampleDetails() }
         if autoOptimize { Task { await autoOptimizeIfNeeded() } }
+        if autoUpdate, Date().timeIntervalSince(lastUpdateCheck) >= Self.updateInterval,
+           !CommandLine.arguments.contains("--screenshots") {
+            lastUpdateCheck = Date()
+            Task { await checkForUpdate(installIfFound: true) }
+        }
+    }
+
+    /// Manual checks only report; the automatic one installs, but never while the panel is open.
+    func checkForUpdate(installIfFound: Bool = false) async {
+        checkingUpdate = true
+        defer { checkingUpdate = false }
+        do {
+            updateAvailable = try await Updater.check()
+            updateStatus = updateAvailable == nil ? tr("已是最新版本", "You're up to date") : nil
+            if installIfFound, updateAvailable != nil, !panelOpen { await installUpdate() }
+        } catch {
+            updateStatus = tr("检查失败：", "Check failed: ") + error.localizedDescription
+        }
+    }
+
+    func installUpdate() async {
+        guard let r = updateAvailable else { return }
+        installingUpdate = true
+        updateStatus = await Updater.install(r)  // only returns on failure
+        installingUpdate = false
     }
 
     private func updateMenuImage() {

@@ -59,9 +59,14 @@ Requires macOS 14+ and Xcode command line tools.
 ```bash
 ./build-app.sh            # builds build/LLMMemCleaner.app
 ./build-app.sh --install  # also installs to ~/Applications and launches it
+./release.sh "notes"      # bump VERSION first; publishes a GitHub release the app auto-updates from
 ```
 
+The app checks the latest GitHub release every 6 hours (About → Updates) and, when auto-update is on, installs it and relaunches while the panel is closed.
+
 ## Author / 作者
+
+**大老二 胡震生 · 0xBig2** — builder of AI & crypto tools, ex-founder of Weipai (微拍). / 做 AI 和加密货币工具的开发者，微拍前创始人。
 
 X: [@HUZHENSHENG](https://x.com/HUZHENSHENG) — follow for updates and feedback. / 关注获取更新、反馈问题。
 

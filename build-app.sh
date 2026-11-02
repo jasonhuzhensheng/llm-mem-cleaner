@@ -3,6 +3,7 @@
 set -e
 cd "$(dirname "$0")"
 # -Osize: this app is UI/syscall-bound, so smaller code beats aggressive inlining. dead_strip drops unused code.
+VERSION=$(cat VERSION)
 swift build -c release -Xswiftc -Osize -Xlinker -dead_strip
 APP=build/LLMMemCleaner.app
 rm -rf "$APP"
@@ -17,7 +18,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleIdentifier</key><string>local.llm-mem-cleaner</string>
   <key>CFBundleExecutable</key><string>LLMMemCleaner</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.1</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><true/>
 </dict></plist>
