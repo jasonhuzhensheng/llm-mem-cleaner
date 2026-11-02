@@ -57,6 +57,7 @@ struct ContentView: View {
                 switch model.tab {
                 case .memory: MemoryTab(model: model)
                 case .models: ModelsTab(model: model)
+                case .menuBar: MenuBarTab(model: model)
                 case .cpu: CPUTab(model: model)
                 case .gpu: GPUTab(model: model)
                 case .disk: DiskTab(model: model)
@@ -1047,6 +1048,9 @@ struct StartupTab: View {
                 Button(tr("刷新", "Refresh")) { Task { await model.reloadStartupItems() } }
             }
             .controlSize(.small)
+
+            StartupCleanupSection(model: model)
+            Divider()
 
             if let items = model.startupItems {
                 ForEach(StartupItem.Kind.allCases, id: \.self) { kind in

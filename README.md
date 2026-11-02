@@ -41,13 +41,14 @@ Regenerate with `build/LLMMemCleaner.app/Contents/MacOS/LLMMemCleaner --screensh
 
 | Tab | What it does |
 |---|---|
-| **Memory 内存** | Available memory, pressure, swap; which model sizes fit (Q4 estimate, GPU limit aware); per-app memory (helpers grouped) with one-click quit; unload Ollama models |
+| **Memory 内存** | Crazy optimize: one click unloads idle models, stops idle model services, VMs and background processes and quits idle apps (auto mode optional); system optimization (Spotlight on the model disk, Photos analysis, Apple Intelligence, transparency, antivirus); available memory, pressure, swap; which model sizes fit (Q4 estimate, GPU limit aware); per-app memory (helpers grouped) with one-click quit; unload Ollama models |
 | **Models 模型** | LLMs currently loaded by Ollama, LM Studio, MLX-Serve, llama.cpp or mlx-lm with memory, file size and context length; warns when the same model is loaded twice or the context is huge; one-click unload (or unload all) |
 | **CPU** | Total and per-core usage, load average; per-app CPU with one-click quit |
 | **GPU** | Utilization, GPU memory in use, unified-memory wired limit with 85% / 87.5% / 90% / custom presets (`iogpu.wired_limit_mb`, admin, resets on reboot) |
 | **Disk 磁盘** | Free space, read/write throughput, per-app disk I/O; scan Ollama / Hugging Face / LM Studio models and caches; one-click cache cleaning |
 | **Network 网络** | Speed test (`networkQuality`), Wi-Fi signal, DNS flush + DHCP renew with before/after test, per-process traffic with stop button |
-| **Startup 启动项** | Login items, LaunchAgents, LaunchDaemons and Homebrew services with on/off toggles; launch-at-login for this app |
+| **Startup 启动项** | Login items, LaunchAgents, LaunchDaemons and Homebrew services with on/off toggles; crazy cleanup turns off updaters, leftovers and other non-essential items in one click, with undo; launch-at-login for this app |
+| **Menu 菜单栏** | Third-party menu bar apps; crazy clear quits them (and optionally stops them opening at login) in one click |
 
 UI in Chinese and English (picker at the bottom of the panel).
 

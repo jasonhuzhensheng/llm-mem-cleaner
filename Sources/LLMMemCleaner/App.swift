@@ -21,7 +21,7 @@ struct LLMMemCleanerApp: App {
 }
 
 enum Tab: String, CaseIterable, Identifiable {
-    case memory, models, cpu, gpu, disk, network, startup
+    case memory, models, cpu, gpu, disk, network, startup, menuBar
     var id: String { rawValue }
 
     var title: String {
@@ -33,6 +33,7 @@ enum Tab: String, CaseIterable, Identifiable {
         case .disk: tr("磁盘", "Disk")
         case .network: tr("网络", "Network")
         case .startup: tr("启动项", "Startup")
+        case .menuBar: tr("菜单栏", "Menu")
         }
     }
 }
@@ -65,7 +66,7 @@ final class MonitorModel {
         didSet { if systemExpanded && !oldValue { Task { await reloadSystemTweaks() } } }
     }
 
-    // Smart optimize
+    // Crazy optimize
     var optimizeCandidates: [OptimizeCandidate]?
     var optimizeSelection: Set<String> = []
     var optimizeScanning = false
@@ -186,6 +187,9 @@ final class MonitorModel {
             processNetwork = await procNetSampler.sample()
             wifi = NetworkTools.wifiInfo()
         case .startup where startupItems == nil: await reloadStartupItems()
+        case .menuBar:
+            menuBarApps = MenuBarApps.scan()
+            if startupItems == nil { await reloadStartupItems() }
         case .disk where ollamaInstalled == nil: ollamaInstalled = await Ollama.installedModels()
         default: break
         }
@@ -261,7 +265,7 @@ final class MonitorModel {
         busy = false
     }
 
-    // MARK: Smart optimize
+    // MARK: Crazy optimize
 
     func scanOptimize() async {
         optimizeScanning = true
@@ -440,6 +444,64 @@ final class MonitorModel {
     }
 
     // MARK: Startup
+
+    var menuBarApps: [MenuBarApp] = []
+    var menuBarSelection: Set<pid_t>?
+
+    /// Quits the chosen menu bar apps and, optionally, stops them from coming back at login.
+    func clearMenuBar(_ apps: [MenuBarApp], alsoStartup: Bool) async {
+        busy = true
+        var startupOff = 0
+        if alsoStartup {
+            if startupItems == nil { await reloadStartupItems() }
+            let entries = MenuBarApps.startupEntries(for: apps, in: startupItems ?? [])
+            startupOff = await StartupCleanup.disable(entries).done.count
+            startupUndoAvailable = StartupCleanup.hasUndo
+        }
+        await AppSampler.quit(apps.map(\.app), grace: 3)
+        menuBarApps = MenuBarApps.scan()
+        menuBarSelection = nil
+        await reloadStartupItems()
+        stats = MemoryStats.current()
+        updateMenuImage()
+        message = tr("已退出 \(apps.count) 个菜单栏应用", "Quit \(apps.count) menu bar apps")
+            + (startupOff > 0 ? tr("，关闭了 \(startupOff) 个开机启动", "; turned off \(startupOff) at login") : "")
+        busy = false
+    }
+
+    /// Crazy startup cleanup: the suggestion list is shown while non-nil.
+    var startupSuggestions: [StartupSuggestion]?
+    var startupSelection: Set<String> = []
+    var startupUndoAvailable = StartupCleanup.hasUndo
+
+    func planStartupCleanup() async {
+        if startupItems == nil { await reloadStartupItems() }
+        let list = StartupCleanup.suggestions(startupItems ?? [])
+        startupSuggestions = list
+        startupSelection = Set(list.filter { $0.tier != .keep }.map(\.id))
+    }
+
+    func runStartupCleanup() async {
+        let chosen = (startupSuggestions ?? []).filter { startupSelection.contains($0.id) }.map(\.item)
+        busy = true
+        let (done, failed) = await StartupCleanup.disable(chosen)
+        message = tr("已关闭 \(done.count) 个启动项", "Turned off \(done.count) startup items")
+            + (failed.isEmpty ? "" : tr("，未完成：\(failed.joined(separator: "、"))", "; not done: \(failed.joined(separator: ", "))"))
+        startupSuggestions = nil
+        startupUndoAvailable = StartupCleanup.hasUndo
+        await reloadStartupItems()
+        busy = false
+    }
+
+    func undoStartupCleanup() async {
+        busy = true
+        let failed = await StartupCleanup.undo()
+        message = failed.isEmpty ? tr("已恢复上次关闭的启动项", "Restored the startup items from the last cleanup")
+            : tr("部分未恢复：\(failed.joined(separator: "、"))", "Some weren't restored: \(failed.joined(separator: ", "))")
+        startupUndoAvailable = StartupCleanup.hasUndo
+        await reloadStartupItems()
+        busy = false
+    }
 
     func reloadStartupItems() async {
         startupItems = await StartupItems.load()

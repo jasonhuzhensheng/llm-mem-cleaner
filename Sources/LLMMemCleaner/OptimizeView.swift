@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// "Smart optimize": finds big idle models, model services, VMs, background processes and apps,
+/// "Crazy optimize": finds big idle models, model services, VMs, background processes and apps,
 /// pre-checks the safe ones, and frees them in one click. Optional auto mode when memory is tight.
 struct OptimizeSection: View {
     @Bindable var model: MonitorModel
@@ -14,11 +14,11 @@ struct OptimizeSection: View {
                     Task { await model.scanOptimize() }
                 } label: {
                     Label(model.optimizeScanning ? tr("正在分析空闲的大内存占用…", "Looking for big idle memory users…")
-                                                 : tr("智能优化内存", "Smart optimize"),
+                                                 : tr("疯狂优化内存", "Crazy optimize"),
                           systemImage: "wand.and.stars")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.borderedProminent).tint(.orange)
                 .disabled(model.optimizeScanning || model.optimizing)
             }
             Toggle(isOn: $model.autoOptimize) {
@@ -32,7 +32,7 @@ struct OptimizeSection: View {
     }
 
     @ViewBuilder private func list(_ candidates: [OptimizeCandidate]) -> some View {
-        SectionTitle(text: tr("智能优化建议", "Suggestions"))
+        SectionTitle(text: tr("疯狂优化：能清理的都已勾选", "Crazy optimize: everything clearable is checked"))
         if candidates.isEmpty {
             Text(tr("没有发现空闲的大内存占用，内存都在被正常使用。", "Nothing big and idle found; memory is in active use."))
                 .font(.caption).foregroundStyle(.secondary)
@@ -68,8 +68,8 @@ struct OptimizeSection: View {
             Button(tr("取消", "Cancel")) { model.optimizeCandidates = nil }
                 .disabled(model.optimizing)
         }
-        Text(tr("已勾选的是空闲项：模型卸载、服务和虚拟机正常停止，下次使用时会重新启动。应用默认不勾选，退出前请先保存。",
-                "Idle items are pre-checked: models are unloaded, services and VMs shut down cleanly and start again next time. Apps are never pre-checked; save your work first."))
+        Text(tr("所有空闲的都已勾选，包括后台应用：模型卸载、服务和虚拟机正常停止，应用正常退出（5 秒后强制）。你正在用的应用和正在忙的项目不勾选。退出前请先保存。",
+                "Everything idle is checked, apps included: models unload, services and VMs shut down cleanly, apps quit (forced after 5 s). The app you're using and busy items stay unchecked. Save your work first."))
             .font(.caption2).foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
     }

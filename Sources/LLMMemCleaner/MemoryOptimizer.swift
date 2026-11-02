@@ -1,7 +1,7 @@
 import AppKit
 import Darwin
 
-/// Something big and idle that "Smart optimize" offers to unload, stop or quit.
+/// Something big and idle that "Crazy optimize" offers to unload, stop or quit.
 struct OptimizeCandidate: Identifiable {
     enum Action {
         case unloadModel(RunningModel)
@@ -77,8 +77,10 @@ enum MemoryOptimizer {
     static let toolPath = "/opt/homebrew/bin:/usr/local/bin"
 
     /// Background processes and apps smaller than these aren't worth offering.
-    static let minProcessBytes: UInt64 = 500 << 20
-    static let minAppBytes: UInt64 = 1 << 30
+    static let minProcessBytes: UInt64 = 200 << 20
+    static let minAppBytes: UInt64 = 300 << 20
+    /// Apps never pre-checked: losing them is surprising or unsafe.
+    private static let keepApps = ["1password", "bitwarden", "vpn", "kaspersky", "terminal", "iterm", "xcode"]
     static let minServiceBytes: UInt64 = 200 << 20
 
     @MainActor
@@ -90,8 +92,10 @@ enum MemoryOptimizer {
             .filter { $0.kind == .own && $0.origin == .user && $0.bytes >= minProcessBytes }
             // Helpers inside an app bundle (browser renderers etc.) belong to that app; killing them breaks it.
             .filter { g in !g.pids.contains { executablePath(Int($0))?.contains(".app/") ?? true } }
-        let frontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier
-        let bigApps = apps.filter { $0.footprint >= minAppBytes && $0.id != frontmost }
+        // The app you were in before opening this panel owns the menu bar; never touch it.
+        let inUse: Set<pid_t> = Set([NSWorkspace.shared.frontmostApplication, NSWorkspace.shared.menuBarOwningApplication]
+            .compactMap { $0?.processIdentifier })
+        let bigApps = apps.filter { $0.footprint >= minAppBytes && !inUse.contains($0.id) }
 
         let llmPIDs = Set(models.flatMap(\.pids).map(pid_t.init) + services.flatMap(\.pids).map(pid_t.init))
         let appPIDs: [pid_t: [pid_t]] = Dictionary(uniqueKeysWithValues: bigApps.map { ($0.id, appProcessPIDs($0.app)) })
@@ -147,11 +151,12 @@ enum MemoryOptimizer {
         }
         for a in bigApps {
             let (isIdle, state) = idle(appPIDs[a.id] ?? [a.id])
-            guard isIdle else { continue }
+            let key = ((a.app.bundleIdentifier ?? "") + " " + a.name).lowercased()
+            let keep = keepApps.contains(where: key.contains)
             out.append(OptimizeCandidate(
                 id: "app|\(a.id)", title: a.name,
-                detail: tr("应用，不在前台 · \(state) · 退出可能丢失未保存内容", "App in background · \(state) · unsaved work may be lost"),
-                memory: a.footprint, action: .quitApp(a.app), recommended: false, automatic: false))
+                detail: tr("应用，不在前台 · \(state) · 退出前请先保存", "App in background · \(state) · save your work first"),
+                memory: a.footprint, action: .quitApp(a.app), recommended: isIdle && !keep, automatic: false))
         }
         tracker.forget(except: Set(all))
         return out.sorted { $0.memory > $1.memory }
