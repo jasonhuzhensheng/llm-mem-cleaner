@@ -118,8 +118,11 @@ enum RunningModels {
             let footprint = AppSampler.rusage(pid)?.ri_phys_footprint
             guard known || (footprint ?? 0) >= genericMinFootprint else { continue }
             guard let args = processArguments(Int(pid)) else { continue }
-            if isPython && !args.contains(where: { $0.contains("mlx_lm") || $0.contains("vllm") }) { continue }
-            if !known && !(flag(args, ["--model", "-m"]) != nil && (args.contains("serve") || flag(args, ["--port"]) != nil)) { continue }
+            let model = modelArgument(args)
+            let isLLMPython = args.contains(where: { $0.contains("mlx_lm") || $0.contains("vllm") })
+            // Custom Python engines (`server.py --model …`, `python - /path/to/model`): big and pointing at weights.
+            if isPython && !isLLMPython && !((footprint ?? 0) >= genericMinFootprint && model != nil) { continue }
+            if !known && !(model != nil && (args.contains("serve") || flag(args, ["--port"]) != nil)) { continue }
 
             let runtime: RunningModel.Runtime =
                 path.contains("Ollama.app") || path.contains("/ollama") ? .ollama
@@ -128,9 +131,8 @@ enum RunningModels {
                 : isPython && args.contains(where: { $0.contains("mlx_lm") }) ? .mlxLM
                 : exe == "llama-server" ? .llamaCpp
                 : exe == "kapitsa" ? .kapitsa : .other
-            let model = flag(args, ["--model", "-m"])
             var proc = ServerProcess(
-                pid: Int(pid), executable: exe, runtime: runtime, modelPath: model,
+                pid: Int(pid), executable: isPython ? pythonEngineName(Int(pid), args) : exe, runtime: runtime, modelPath: model,
                 contextLength: flag(args, ["--ctx-size", "-c", "--context", "--max-kv-size", "--max-model-len"]).flatMap(tokenCount),
                 port: flag(args, ["--port"]).flatMap { Int($0) },
                 memory: footprint)
@@ -174,6 +176,53 @@ enum RunningModels {
     }
 
     /// Value of `--name value` or `--name=value`.
+    /// Engines recognised by a module next to their entry script.
+    private static let pythonEngines = [("flash_next.py", "Flash-Next")]
+
+    /// A Python engine's name: a known engine found beside its script, else the script's file name
+    /// ("server.py") rather than "python3.12".
+    static func pythonEngineName(_ pid: Int, _ args: [String]) -> String {
+        let script = args.dropFirst().first { $0.hasSuffix(".py") }
+        let cwd = workingDirectory(pid)
+        var dirs: [String] = []
+        if let script {
+            let dir = (script as NSString).deletingLastPathComponent
+            dirs.append(script.hasPrefix("/") ? dir : ((cwd ?? "") as NSString).appendingPathComponent(dir))
+        }
+        if let cwd { dirs += [cwd, (cwd as NSString).appendingPathComponent("engine")] }
+        for (file, name) in pythonEngines
+        where dirs.contains(where: { FileManager.default.fileExists(atPath: ($0 as NSString).appendingPathComponent(file)) }) {
+            return name
+        }
+        return script.map { ($0 as NSString).lastPathComponent } ?? "Python"
+    }
+
+    static func workingDirectory(_ pid: Int) -> String? {
+        var info = proc_vnodepathinfo()
+        let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
+        guard proc_pidinfo(Int32(pid), PROC_PIDVNODEPATHINFO, 0, &info, size) == size else { return nil }
+        return withUnsafePointer(to: info.pvi_cdir.vip_path) {
+            $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
+        }
+    }
+
+    /// The model a server was started with: `--model`/`-m`, else the first argument that is a
+    /// weights file (.gguf/.safetensors) or a folder holding one.
+    static func modelArgument(_ args: [String]) -> String? {
+        if let m = flag(args, ["--model", "-m"]) { return m }
+        let fm = FileManager.default
+        let weights = [".gguf", ".safetensors"]
+        return args.dropFirst().first { a in
+            guard a.hasPrefix("/") || a.hasPrefix("~") else { return false }
+            let path = (a as NSString).expandingTildeInPath
+            var isDir: ObjCBool = false
+            guard fm.fileExists(atPath: path, isDirectory: &isDir) else { return false }
+            if !isDir.boolValue { return weights.contains { path.hasSuffix($0) } }
+            let files = (try? fm.contentsOfDirectory(atPath: path)) ?? []
+            return files.contains { f in weights.contains { f.hasSuffix($0) } }
+        }
+    }
+
     static func flag(_ args: [String], _ names: [String]) -> String? {
         for (i, a) in args.enumerated() {
             for n in names {

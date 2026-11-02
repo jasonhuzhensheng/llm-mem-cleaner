@@ -42,8 +42,8 @@ struct ModelsTab: View {
             }
 
             Divider()
-            Text(tr("支持 Ollama、LM Studio、MLX-Serve、llama.cpp、mlx-lm、Kapitsa，以及其他带 --model 参数、占用 1GB 以上的模型服务。Ollama 和 LM Studio 卸载后服务继续运行；其他是独立服务，卸载即停止该服务。内存为进程实际占用，按需从磁盘映射的权重不计入。",
-                    "Detects Ollama, LM Studio, MLX-Serve, llama.cpp, mlx-lm, Kapitsa, and other servers started with --model that use over 1 GB. Ollama and LM Studio keep serving after an unload; the others are standalone servers, so unloading stops them. Memory is the process footprint; weights memory-mapped from disk aren't counted."))
+            Text(tr("支持 Ollama、LM Studio、MLX-Serve、llama.cpp、mlx-lm、Kapitsa、Flash-Next，以及其他带 --model 或模型路径参数、占用 1GB 以上的模型服务。Ollama 和 LM Studio 卸载后服务继续运行；其他是独立服务，卸载即停止该服务。内存为进程实际占用，按需从磁盘映射的权重不计入。",
+                    "Detects Ollama, LM Studio, MLX-Serve, llama.cpp, mlx-lm, Kapitsa, Flash-Next, and other servers started with --model or a model path that use over 1 GB. Ollama and LM Studio keep serving after an unload; the others are standalone servers, so unloading stops them. Memory is the process footprint; weights memory-mapped from disk aren't counted."))
                 .font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
